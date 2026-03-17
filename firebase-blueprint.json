@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with specific access roles",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "Unique username (email prefix)" },
+        "name": { "type": "string", "description": "Full name of the staff member" },
+        "role": { 
+          "type": "string", 
+          "enum": ["Admin", "Receptionist", "Waiter", "Barman", "Laundry"],
+          "description": "Access level" 
+        },
+        "email": { "type": "string", "format": "email" }
+      },
+      "required": ["username", "name", "role"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Hotel room details",
+      "type": "object",
+      "properties": {
+        "number": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "status": { "type": "string", "enum": ["Available", "Occupied", "Cleaning", "Maintenance"] }
+      },
+      "required": ["number", "category", "price", "status"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Food or drink item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "type": { "type": "string", "enum": ["Restaurant", "Bar"] }
+      },
+      "required": ["name", "price", "category", "type"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Restaurant or Bar order",
+      "type": "object",
+      "properties": {
+        "table_number": { "type": "string" },
+        "items": { "type": "array" },
+        "total_price": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Served", "Paid", "Cancelled"] },
+        "type": { "type": "string", "enum": ["Restaurant", "Bar"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["table_number", "items", "total_price", "status", "type", "created_at"]
+    },
+    "LaundryOrder": {
+      "title": "LaundryOrder",
+      "description": "Laundry service request",
+      "type": "object",
+      "properties": {
+        "room_number": { "type": "string" },
+        "items": { "type": "array" },
+        "total_price": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Ready", "Delivered"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["room_number", "items", "total_price", "status", "created_at"]
+    },
+    "ConferenceRoom": {
+      "title": "ConferenceRoom",
+      "description": "Conference facility",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "capacity": { "type": "number" },
+        "price_per_hour": { "type": "number" },
+        "status": { "type": "string", "enum": ["Available", "Booked", "Maintenance"] }
+      },
+      "required": ["name", "capacity", "price_per_hour", "status"]
+    },
+    "ConferenceBooking": {
+      "title": "ConferenceBooking",
+      "description": "Booking for conference room",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "start_time": { "type": "string", "format": "date-time" },
+        "end_time": { "type": "string", "format": "date-time" },
+        "services": { "type": "array" },
+        "total_price": { "type": "number" },
+        "status": { "type": "string", "enum": ["Confirmed", "Cancelled", "Completed"] }
+      },
+      "required": ["room_id", "client_name", "start_time", "end_time", "total_price", "status"]
+    },
+    "LaundryService": {
+      "title": "LaundryService",
+      "description": "Type of laundry service available",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["name", "price"]
+    },
+    "ConferenceService": {
+      "title": "ConferenceService",
+      "description": "Additional service for conference room",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["name", "price"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "System users" },
+    "rooms": { "schema": "Room", "description": "Hotel rooms" },
+    "menu_items": { "schema": "MenuItem", "description": "Menu items" },
+    "orders": { "schema": "Order", "description": "POS orders" },
+    "laundry_orders": { "schema": "LaundryOrder", "description": "Laundry service orders" },
+    "laundry_services": { "schema": "LaundryService", "description": "Available laundry services" },
+    "room_bookings": { "schema": "RoomBooking", "description": "Guest check-ins" },
+    "conference_rooms": { "schema": "ConferenceRoom", "description": "Conference rooms" },
+    "conference_bookings": { "schema": "ConferenceBooking", "description": "Conference bookings" },
+    "conference_services": { "schema": "ConferenceService", "description": "Available conference services" }
+  }
+}
