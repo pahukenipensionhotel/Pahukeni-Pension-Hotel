@@ -89,11 +89,33 @@ service cloud.firestore {
       );
     }
 
+    function isWaiter() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Waiter';
+    }
+
+    function isBarman() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Barman';
+    }
+
+    function isReceptionist() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Receptionist';
+    }
+
+    function isLaundryStaff() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Laundry';
+    }
+
     function isStaff() {
       return isAuthenticated() && (
-        isAdmin() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role in ['Receptionist', 'Waiter', 'Barman', 'Laundry'])
+        isAdmin() || isWaiter() || isBarman() || isReceptionist() || isLaundryStaff()
       );
     }
 
@@ -128,20 +150,25 @@ service cloud.firestore {
     }
 
     function isValidRoom(data) {
-      return hasOnlyAllowedFields(['number', 'category', 'price', 'status']) &&
+      return hasOnlyAllowedFields(['number', 'category', 'price', 'status', 'imageUrl']) &&
         data.number is string && data.number.size() > 0 && data.number.size() < 20 &&
         data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
         data.price is number && data.price >= 0 &&
-        data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance'];
+        data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance'] &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 500));
     }
 
     function isValidMenuItem(data) {
-      return hasOnlyAllowedFields(['name', 'price', 'category', 'type', 'status']) &&
+      return hasOnlyAllowedFields(['name', 'price', 'category', 'type', 'status', 'imageUrl', 'stock', 'costPrice', 'minStock']) &&
         data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
         data.price is number && data.price >= 0 &&
         data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
         data.type in ['Restaurant', 'Bar'] &&
-        data.status in ['Available', 'Out of Stock'];
+        data.status in ['Available', 'Out of Stock'] &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 500)) &&
+        (!('stock' in data) || data.stock is number) &&
+        (!('costPrice' in data) || data.costPrice is number) &&
+        (!('minStock' in data) || data.minStock is number);
     }
 
     function isValidOrder(data) {
@@ -208,12 +235,17 @@ service cloud.firestore {
 
     match /rooms/{roomId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isStaff();
+      allow create, update, delete: if isAdmin() || isReceptionist();
     }
 
     match /menu_items/{itemId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isStaff();
+      allow create: if isAdmin() || 
+        (isWaiter() && request.resource.data.type == 'Restaurant') || 
+        (isBarman() && request.resource.data.type == 'Bar');
+      allow update, delete: if isAdmin() || 
+        (isWaiter() && resource.data.type == 'Restaurant') || 
+        (isBarman() && resource.data.type == 'Bar');
     }
 
     match /orders/{orderId} {
@@ -232,23 +264,23 @@ service cloud.firestore {
 
     match /laundry_services/{serviceId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isLaundryStaff() || isReceptionist();
     }
 
     match /conference_rooms/{roomId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isReceptionist();
     }
 
     match /conference_bookings/{bookingId} {
       allow read: if isAuthenticated();
-      allow create, update: if isStaff() && isValidConferenceBooking(request.resource.data);
+      allow create, update: if isAdmin() || isReceptionist();
       allow delete: if isAdmin();
     }
 
     match /conference_services/{serviceId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isReceptionist();
     }
 
     match /room_bookings/{bookingId} {
