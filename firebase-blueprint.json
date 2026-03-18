@@ -9,7 +9,7 @@
         "name": { "type": "string", "description": "Full name of the staff member" },
         "role": { 
           "type": "string", 
-          "enum": ["Admin", "Receptionist", "Waiter", "Barman", "Laundry"],
+          "enum": ["Admin", "Receptionist", "Waiter", "Barman", "Laundry", "Customer"],
           "description": "Access level" 
         },
         "email": { "type": "string", "format": "email" }
@@ -24,7 +24,8 @@
         "number": { "type": "string" },
         "category": { "type": "string" },
         "price": { "type": "number" },
-        "status": { "type": "string", "enum": ["Available", "Occupied", "Cleaning", "Maintenance"] }
+        "status": { "type": "string", "enum": ["Available", "Occupied", "Cleaning", "Maintenance"] },
+        "imageUrl": { "type": "string", "description": "URL of the room image" }
       },
       "required": ["number", "category", "price", "status"]
     },
@@ -35,10 +36,15 @@
       "properties": {
         "name": { "type": "string" },
         "price": { "type": "number" },
+        "costPrice": { "type": "number", "description": "Purchase price for inventory" },
         "category": { "type": "string" },
-        "type": { "type": "string", "enum": ["Restaurant", "Bar"] }
+        "type": { "type": "string", "enum": ["Restaurant", "Bar"] },
+        "status": { "type": "string", "enum": ["Available", "Out of Stock"] },
+        "stock": { "type": "number", "description": "Current quantity in stock" },
+        "minStock": { "type": "number", "description": "Minimum stock level for warning" },
+        "imageUrl": { "type": "string", "description": "URL of the item image" }
       },
-      "required": ["name", "price", "category", "type"]
+      "required": ["name", "price", "category", "type", "status"]
     },
     "Order": {
       "title": "Order",
@@ -46,26 +52,32 @@
       "type": "object",
       "properties": {
         "table_number": { "type": "string" },
+        "customer_name": { "type": "string" },
+        "customer_email": { "type": "string" },
         "items": { "type": "array" },
         "total_price": { "type": "number" },
-        "status": { "type": "string", "enum": ["Pending", "Served", "Paid", "Cancelled"] },
+        "status": { "type": "string", "enum": ["Pending", "Accepted", "Preparing", "Serving", "Completed", "Cancelled", "Paid"] },
         "type": { "type": "string", "enum": ["Restaurant", "Bar"] },
-        "created_at": { "type": "string", "format": "date-time" }
+        "created_at": { "type": "string", "format": "date-time" },
+        "estimated_arrival": { "type": "string" }
       },
-      "required": ["table_number", "items", "total_price", "status", "type", "created_at"]
+      "required": ["items", "total_price", "status", "type", "created_at"]
     },
     "LaundryOrder": {
       "title": "LaundryOrder",
       "description": "Laundry service request",
       "type": "object",
       "properties": {
+        "guest_name": { "type": "string" },
         "room_number": { "type": "string" },
+        "customer_email": { "type": "string" },
         "items": { "type": "array" },
         "total_price": { "type": "number" },
         "status": { "type": "string", "enum": ["Pending", "In Progress", "Ready", "Delivered"] },
-        "created_at": { "type": "string", "format": "date-time" }
+        "created_at": { "type": "string", "format": "date-time" },
+        "estimated_arrival": { "type": "string" }
       },
-      "required": ["room_number", "items", "total_price", "status", "created_at"]
+      "required": ["guest_name", "items", "total_price", "status", "created_at"]
     },
     "ConferenceRoom": {
       "title": "ConferenceRoom",

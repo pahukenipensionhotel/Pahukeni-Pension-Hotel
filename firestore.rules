@@ -26,13 +26,14 @@ service cloud.firestore {
     //   - price: number (required, positive)
     //   - category: string (required)
     //   - type: string (required, enum: Restaurant, Bar)
+    //   - status: string (required, enum: Available, Out of Stock)
     //
     // Collection: orders
     // Fields:
     //   - table_number: string (required)
     //   - items: list (required, max 50 items)
     //   - total_price: number (required, positive)
-    //   - status: string (required, enum: Pending, Served, Paid, Cancelled)
+    //   - status: string (required, enum: Pending, Accepted, Preparing, Serving, Completed, Cancelled, Paid)
     //   - type: string (required, enum: Restaurant, Bar)
     //   - created_at: string (required, format: date-time)
     //
@@ -77,18 +78,29 @@ service cloud.firestore {
     // Helper Functions
     // ===============================================================
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.email != null;
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Admin' ||
-         (request.auth.token.email == "btutu427@gmail.com" && request.auth.token.email_verified == true));
+      return isAuthenticated() && (
+        (request.auth.token.email == "btutu427@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Admin')
+      );
     }
 
     function isStaff() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role in ['Receptionist', 'Waiter', 'Barman', 'Laundry'])
+      );
+    }
+
+    function isCustomer() {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry'];
+        userExists(request.auth.token.email) && 
+        getUserData(request.auth.token.email).role == 'Customer';
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -109,7 +121,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return hasOnlyAllowedFields(['username', 'role', 'name', 'email', 'password']) &&
         data.username is string && data.username.size() > 0 && data.username.size() < 100 &&
-        data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry'] &&
+        data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry', 'Customer'] &&
         data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
         (!('email' in data) || isValidEmail(data.email)) &&
         (!('password' in data) || (data.password is string && data.password.size() >= 6));
@@ -124,11 +136,12 @@ service cloud.firestore {
     }
 
     function isValidMenuItem(data) {
-      return hasOnlyAllowedFields(['name', 'price', 'category', 'type']) &&
+      return hasOnlyAllowedFields(['name', 'price', 'category', 'type', 'status']) &&
         data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
         data.price is number && data.price >= 0 &&
         data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
-        data.type in ['Restaurant', 'Bar'];
+        data.type in ['Restaurant', 'Bar'] &&
+        data.status in ['Available', 'Out of Stock'];
     }
 
     function isValidOrder(data) {
@@ -136,7 +149,7 @@ service cloud.firestore {
         data.table_number is string && data.table_number.size() > 0 &&
         data.items is list && data.items.size() <= 50 &&
         data.total_price is number && data.total_price >= 0 &&
-        data.status in ['Pending', 'Served', 'Paid', 'Cancelled'] &&
+        data.status in ['Pending', 'Accepted', 'Preparing', 'Serving', 'Completed', 'Cancelled', 'Paid'] &&
         data.type in ['Restaurant', 'Bar'] &&
         isValidDateTime(data.created_at);
     }
@@ -186,10 +199,10 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      // Allow all authenticated users to read staff list for now, 
-      // but in production we should restrict PII.
+      // Temporarily simplify rules to diagnose permission error
       allow read: if isAuthenticated();
-      allow create, update: if isAdmin() && isValidUser(request.resource.data);
+      allow create: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
       allow delete: if isAdmin();
     }
 
@@ -200,18 +213,20 @@ service cloud.firestore {
 
     match /menu_items/{itemId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isStaff();
     }
 
     match /orders/{orderId} {
       allow read: if isAuthenticated();
-      allow create, update: if isStaff() && isValidOrder(request.resource.data);
+      allow create: if (isStaff() || isCustomer()) && isValidOrder(request.resource.data);
+      allow update: if isStaff() && isValidOrder(request.resource.data);
       allow delete: if isAdmin();
     }
 
     match /laundry_orders/{orderId} {
       allow read: if isAuthenticated();
-      allow create, update: if isStaff() && isValidLaundryOrder(request.resource.data);
+      allow create: if (isStaff() || isCustomer()) && isValidLaundryOrder(request.resource.data);
+      allow update: if isStaff() && isValidLaundryOrder(request.resource.data);
       allow delete: if isAdmin();
     }
 

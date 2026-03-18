@@ -16,10 +16,13 @@ import {
   AlertCircle,
   ChevronRight,
   Printer,
-  X
+  X,
+  Menu,
+  Home as HomeIcon,
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Stats, Room, MenuItem, Order, LaundryOrder, User } from './types';
+import { Stats, Room, MenuItem, Order, LaundryOrder, User, ConferenceRoom, ConferenceService, LaundryService } from './types';
 import { auth, db } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -162,15 +165,28 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [name, setName] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, email, password);
+        // Create customer profile
+        await setDoc(doc(db, 'users', email), {
+          username: email.split('@')[0],
+          name: name || email.split('@')[0],
+          role: 'Customer',
+          email: email
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Action failed');
     } finally {
       setLoading(false);
     }
@@ -181,9 +197,16 @@ const LoginPage = () => {
     setError('');
     try {
       const provider = new GoogleAuthProvider();
+      // Ensure the popup isn't blocked by requesting it directly in the event handler
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      setError(err.message || 'Google login failed');
+      if (err.code === 'auth/popup-closed-by-user') {
+        setError('The login popup was closed before completion. Please try again and keep the window open. Also, ensure third-party cookies are enabled in your browser.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('The login popup was blocked by your browser. Please allow popups for this site.');
+      } else {
+        setError(err.message || 'Google login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -198,7 +221,7 @@ const LoginPage = () => {
       >
         <div className="text-center mb-8">
           <h1 className="text-3xl font-serif italic text-[#141414] mb-2">Pahukeni Pension</h1>
-          <p className="text-sm text-black/50 uppercase tracking-widest font-mono">Management System</p>
+          <p className="text-sm text-black/50 uppercase tracking-widest font-mono">{isRegistering ? 'Customer Registration' : 'Management System'}</p>
         </div>
         
         <div className="space-y-6">
@@ -213,7 +236,7 @@ const LoginPage = () => {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Sign in with Google
+            {isRegistering ? 'Register with Google' : 'Sign in with Google'}
           </button>
 
           <div className="relative">
@@ -221,11 +244,24 @@ const LoginPage = () => {
               <div className="w-full border-t border-black/5"></div>
             </div>
             <div className="relative flex justify-center text-[10px] uppercase font-mono">
-              <span className="bg-white px-2 text-black/30">Or use credentials</span>
+              <span className="bg-white px-2 text-black/30">Or use email</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegistering && (
+              <div>
+                <label className="block text-xs font-mono uppercase text-black/40 mb-2">Full Name</label>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full p-3 bg-[#f5f5f5] border border-black/5 rounded-xl focus:outline-none focus:border-black/20 transition-colors"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-mono uppercase text-black/40 mb-2">Email</label>
               <input 
@@ -233,7 +269,7 @@ const LoginPage = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-3 bg-[#f5f5f5] border border-black/5 rounded-xl focus:outline-none focus:border-black/20 transition-colors"
-                placeholder="admin@pahukeni.com"
+                placeholder="you@example.com"
                 required
               />
             </div>
@@ -254,9 +290,18 @@ const LoginPage = () => {
               disabled={loading}
               className="w-full py-4 bg-[#141414] text-white rounded-xl font-medium hover:bg-black/90 transition-colors shadow-lg shadow-black/10 disabled:opacity-50"
             >
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? 'Processing...' : (isRegistering ? 'Register' : 'Sign In')}
             </button>
           </form>
+
+          <div className="text-center">
+            <button 
+              onClick={() => setIsRegistering(!isRegistering)}
+              className="text-xs font-mono uppercase text-black/40 hover:text-black transition-colors"
+            >
+              {isRegistering ? 'Already have an account? Sign In' : 'New Guest? Register here'}
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -290,8 +335,8 @@ const Dashboard = ({ stats, bookings }: { stats: Stats | null, bookings: any[] }
               </div>
               <span className="text-[10px] font-mono text-black/30 uppercase tracking-wider">Live</span>
             </div>
-            <h3 className="text-2xl font-serif italic text-[#141414]">{card.value}</h3>
-            <p className="text-xs font-mono text-black/40 uppercase mt-1">{card.label}</p>
+            <h3 className="text-xl sm:text-2xl font-serif italic text-[#141414]">{card.value}</h3>
+            <p className="text-[10px] sm:text-xs font-mono text-black/40 uppercase mt-1">{card.label}</p>
           </motion.div>
         ))}
       </div>
@@ -336,15 +381,239 @@ const Dashboard = ({ stats, bookings }: { stats: Stats | null, bookings: any[] }
   );
 };
 
-const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: MenuItem[], isAdmin: boolean }) => {
+const InventoryModule = ({ menu, isAdmin, userRole }: { menu: MenuItem[], isAdmin: boolean, userRole?: string }) => {
+  const [isAddingStock, setIsAddingStock] = useState<string | null>(null);
+  const [isDeductingStock, setIsDeductingStock] = useState<string | null>(null);
+  const [stockAmount, setStockAmount] = useState(0);
+  const [showReport, setShowReport] = useState(false);
+
+  const barMenu = menu.filter(item => item.type === 'Bar');
+
+  const handleUpdateStock = async (itemId: string, amount: number) => {
+    try {
+      const item = barMenu.find(m => m.id === itemId);
+      if (!item) return;
+      const newStock = Math.max(0, (item.stock || 0) + amount);
+      const newStatus = newStock === 0 ? 'Out of Stock' : 'Available';
+      await updateDoc(doc(db, 'menu_items', itemId), { 
+        stock: newStock,
+        status: newStatus
+      });
+      setIsAddingStock(null);
+      setIsDeductingStock(null);
+      setStockAmount(0);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'menu_items');
+    }
+  };
+
+  const reportData = useMemo(() => {
+    const available = barMenu.filter(item => (item.stock || 0) > 0);
+    const outOfStock = barMenu.filter(item => (item.stock || 0) === 0);
+    const totalValue = barMenu.reduce((acc, item) => acc + ((item.stock || 0) * (item.costPrice || 0)), 0);
+    
+    return { available, outOfStock, totalValue };
+  }, [barMenu]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-serif italic">Bar Inventory Management</h3>
+          <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest">Track and manage beverage stock levels</p>
+        </div>
+        <button 
+          onClick={() => setShowReport(true)}
+          className="px-4 py-2 bg-black text-white rounded-xl text-xs font-mono uppercase tracking-widest flex items-center gap-2"
+        >
+          <FileText size={14} />
+          Daily Report
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {barMenu.map(item => (
+          <div key={item.id} className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-md transition-all">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-[10px] font-mono text-black/30 uppercase">{item.category}</p>
+                <h4 className="font-medium text-[#141414]">{item.name}</h4>
+              </div>
+              <span className={`px-2 py-1 rounded-lg text-[10px] font-mono uppercase tracking-wider
+                ${(item.stock || 0) <= (item.minStock || 5) ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                Stock: {item.stock || 0}
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-[#F5F5F0] p-3 rounded-xl">
+                <p className="text-[8px] font-mono text-black/40 uppercase mb-1">Cost Price</p>
+                <p className="font-mono text-sm">N$ {item.costPrice || 0}</p>
+              </div>
+              <div className="bg-[#F5F5F0] p-3 rounded-xl">
+                <p className="text-[8px] font-mono text-black/40 uppercase mb-1">Selling Price</p>
+                <p className="font-mono text-sm">N$ {item.price}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsAddingStock(item.id)}
+                className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/80 transition-colors"
+              >
+                Add Stock
+              </button>
+              <button 
+                onClick={() => setIsDeductingStock(item.id)}
+                className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/5 transition-colors"
+              >
+                Deduct
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add Stock Modal */}
+      <AnimatePresence>
+        {(isAddingStock || isDeductingStock) && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-serif italic">
+                  {isAddingStock ? 'Add Stock' : 'Deduct Stock'}
+                </h3>
+                <button onClick={() => { setIsAddingStock(null); setIsDeductingStock(null); }} className="text-black/40 hover:text-black">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-mono text-black/40 uppercase tracking-widest block mb-2">Quantity</label>
+                  <input 
+                    type="number"
+                    value={stockAmount}
+                    onChange={(e) => setStockAmount(parseInt(e.target.value) || 0)}
+                    className="w-full px-4 py-3 bg-[#F5F5F0] rounded-xl border border-black/5 focus:outline-none focus:ring-2 focus:ring-black/5 font-mono"
+                    placeholder="Enter quantity..."
+                  />
+                </div>
+                <button 
+                  onClick={() => handleUpdateStock((isAddingStock || isDeductingStock)!, isAddingStock ? stockAmount : -stockAmount)}
+                  className="w-full py-4 bg-black text-white rounded-2xl text-xs font-mono uppercase tracking-widest hover:bg-black/80 transition-all"
+                >
+                  Confirm Update
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReport && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-full max-w-2xl rounded-3xl p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-2xl font-serif italic">End of Day Inventory Report</h3>
+                  <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
+                    {new Date().toLocaleDateString('en-US', { dateStyle: 'full' })}
+                  </p>
+                </div>
+                <button onClick={() => setShowReport(false)} className="text-black/40 hover:text-black">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <h4 className="text-xs font-mono uppercase tracking-widest text-black/40 mb-4 border-b border-black/5 pb-2">Available Stock</h4>
+                  <div className="space-y-2">
+                    {reportData.available.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-2 border-b border-black/5 last:border-0">
+                        <div>
+                          <p className="font-medium text-sm">{item.name}</p>
+                          <p className="text-[10px] text-black/40">Cost: N$ {item.costPrice} | Price: N$ {item.price}</p>
+                        </div>
+                        <span className="font-mono text-sm">{item.stock} units</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-mono uppercase tracking-widest text-red-400 mb-4 border-b border-red-100 pb-2">Out of Stock</h4>
+                  <div className="space-y-2">
+                    {reportData.outOfStock.length > 0 ? reportData.outOfStock.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-2 border-b border-black/5 last:border-0">
+                        <p className="font-medium text-sm text-red-600">{item.name}</p>
+                        <span className="font-mono text-sm text-red-600">0 units</span>
+                      </div>
+                    )) : (
+                      <p className="text-xs text-black/30 italic">No items currently out of stock.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-[#141414] text-white p-6 rounded-2xl">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] font-mono text-white/40 uppercase tracking-widest mb-1">Total Inventory Value (Cost)</p>
+                      <p className="text-2xl font-serif italic">N$ {reportData.totalValue.toLocaleString()}</p>
+                    </div>
+                    <button 
+                      onClick={() => window.print()}
+                      className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-colors"
+                    >
+                      <Printer size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const POSModule = ({ type, menu, orders, isAdmin, userRole }: { type: 'Restaurant' | 'Bar', menu: MenuItem[], orders: Order[], isAdmin: boolean, userRole?: string }) => {
   const [cart, setCart] = useState<{ item: any, qty: number }[]>([]);
   const [table, setTable] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [newItem, setNewItem] = useState({ name: '', price: 0, category: '', type });
+  const [newItem, setNewItem] = useState({ 
+    name: '', 
+    price: 0, 
+    category: '', 
+    type, 
+    status: 'Available' as const,
+    costPrice: 0,
+    stock: 0,
+    minStock: 5
+  });
   const [showPrintConfirm, setShowPrintConfirm] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'orders' | 'inventory'>(type === 'Restaurant' ? 'orders' : 'menu');
 
   const filteredMenu = menu.filter(item => item.type === type);
+  const filteredOrders = orders.filter(order => order.type === type).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const canManageMenu = isAdmin || (type === 'Restaurant' && userRole === 'Waiter') || (type === 'Bar' && userRole === 'Barman');
+  const canManageInventory = isAdmin || userRole === 'Barman';
 
   const addToCart = (item: any) => {
     setCart(prev => {
@@ -366,6 +635,22 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
         type,
         created_at: new Date().toISOString()
       });
+
+      // Deduct stock for Bar items
+      if (type === 'Bar') {
+        for (const cartItem of cart) {
+          const menuItem = menu.find(m => m.id === cartItem.item.id);
+          if (menuItem && menuItem.stock !== undefined) {
+            const newStock = Math.max(0, menuItem.stock - cartItem.qty);
+            const newStatus = newStock === 0 ? 'Out of Stock' : menuItem.status;
+            await updateDoc(doc(db, 'menu_items', menuItem.id), { 
+              stock: newStock,
+              status: newStatus
+            });
+          }
+        }
+      }
+
       setCart([]);
       setTable('');
       setShowPrintConfirm(false);
@@ -385,7 +670,16 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
     try {
       await addDoc(collection(db, 'menu_items'), newItem);
       setIsAdding(false);
-      setNewItem({ name: '', price: 0, category: '', type });
+      setNewItem({ 
+        name: '', 
+        price: 0, 
+        category: '', 
+        type, 
+        status: 'Available',
+        costPrice: 0,
+        stock: 0,
+        minStock: 5
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'menu_items');
     }
@@ -399,61 +693,277 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
     }
   };
 
+  const toggleItemStatus = async (item: MenuItem) => {
+    try {
+      const newStatus = item.status === 'Available' ? 'Out of Stock' : 'Available';
+      await updateDoc(doc(db, 'menu_items', item.id), { status: newStatus });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'menu_items');
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: Order['status'], estimatedArrival?: string) => {
+    try {
+      const updateData: any = { status: newStatus };
+      if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
+      await updateDoc(doc(db, 'orders', orderId), updateData);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'orders');
+    }
+  };
+
+  const [estArrival, setEstArrival] = useState<{ [key: string]: string }>({});
+
   return (
-    <div className="flex gap-8 h-[calc(100vh-12rem)]">
-      <div className="flex-1 space-y-6 overflow-y-auto pr-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-serif italic">{type} POS</h2>
-          <div className="flex gap-4">
-            {isAdmin && (
+    <div className="flex flex-col gap-8 h-auto lg:h-[calc(100vh-12rem)]">
+      {/* Sub-navigation */}
+      <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit">
+        {type === 'Restaurant' ? (
+          <>
+            <button 
+              onClick={() => setActiveSubTab('orders')}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                ${activeSubTab === 'orders' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
+            >
+              Live Orders
+            </button>
+            <button 
+              onClick={() => setActiveSubTab('menu')}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                ${activeSubTab === 'menu' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
+            >
+              Menu Management
+            </button>
+          </>
+        ) : (
+          <>
+            <button 
+              onClick={() => setActiveSubTab('menu')}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                ${activeSubTab === 'menu' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
+            >
+              Bar POS
+            </button>
+            <button 
+              onClick={() => setActiveSubTab('orders')}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                ${activeSubTab === 'orders' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
+            >
+              Orders
+            </button>
+            {canManageInventory && (
               <button 
-                onClick={() => setIsAdding(true)}
-                className="px-4 py-2 bg-black text-white rounded-xl text-xs font-mono uppercase tracking-widest"
+                onClick={() => setActiveSubTab('inventory')}
+                className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                  ${activeSubTab === 'inventory' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
               >
-                Add Item
+                Inventory
               </button>
             )}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black/30" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search menu..." 
-                className="pl-10 pr-4 py-2 bg-white border border-black/5 rounded-xl text-sm focus:outline-none focus:border-black/20"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredMenu.map((item) => (
-            <motion.div
-              key={item.id}
-              whileTap={{ scale: 0.98 }}
-              className="bg-white p-4 rounded-2xl border border-black/5 text-left hover:shadow-md transition-all group relative"
-            >
-              {isAdmin && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); deleteMenuItem(item.id); }}
-                  className="absolute top-2 right-2 p-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 z-10"
-                >
-                  <X size={14} />
-                </button>
-              )}
-              <button 
-                onClick={() => addToCart(item)}
-                className="w-full h-full text-left"
-              >
-                <p className="text-[10px] font-mono text-black/30 uppercase mb-1">{item.category}</p>
-                <p className="font-medium text-[#141414] group-hover:text-black transition-colors">{item.name}</p>
-                <p className="text-sm font-serif italic mt-2">N$ {item.price}</p>
-              </button>
-            </motion.div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
 
-      {!isAdmin && cart.length > 0 && (
-        <div className="w-96 bg-white rounded-2xl border border-black/5 shadow-sm flex flex-col">
+      <div className="flex flex-col lg:flex-row gap-8 flex-1 overflow-hidden">
+        <div className="flex-1 space-y-6 overflow-y-auto pr-0 lg:pr-4">
+          {activeSubTab === 'inventory' ? (
+            <InventoryModule menu={menu} isAdmin={isAdmin} userRole={userRole} />
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl md:text-2xl font-serif italic">
+                  {type} {activeSubTab === 'orders' ? 'Orders' : 'Menu'}
+                </h2>
+            <div className="flex flex-wrap items-center gap-3">
+              {(activeSubTab === 'menu' || activeSubTab === 'inventory') && canManageMenu && (
+                <button 
+                  onClick={() => setIsAdding(true)}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 bg-black text-white rounded-xl text-[10px] sm:text-xs font-mono uppercase tracking-widest whitespace-nowrap"
+                >
+                  Add Item
+                </button>
+              )}
+              <div className="relative flex-1 sm:flex-none">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black/30" size={14} />
+                <input 
+                  type="text" 
+                  placeholder={activeSubTab === 'menu' ? "Search menu..." : "Search orders..."}
+                  className="w-full sm:w-auto pl-9 pr-4 py-1.5 sm:py-2 bg-white border border-black/5 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-black/20"
+                />
+              </div>
+            </div>
+          </div>
+
+          {activeSubTab === 'menu' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredMenu.map((item) => (
+                <motion.div
+                  key={item.id}
+                  whileTap={{ scale: 0.98 }}
+                  className={`bg-white p-4 rounded-2xl border border-black/5 text-left hover:shadow-md transition-all group relative
+                    ${item.status === 'Out of Stock' ? 'opacity-60' : ''}`}
+                >
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    {canManageMenu && (
+                      <>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleItemStatus(item); }}
+                          className={`p-1 rounded-lg transition-colors ${item.status === 'Available' ? 'text-orange-400 hover:text-orange-600' : 'text-emerald-400 hover:text-emerald-600'}`}
+                          title={item.status === 'Available' ? 'Mark Out of Stock' : 'Mark Available'}
+                        >
+                          <Clock size={14} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); deleteMenuItem(item.id); }}
+                          className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                          title="Delete Item"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => item.status === 'Available' && addToCart(item)}
+                    disabled={item.status === 'Out of Stock'}
+                    className="w-full h-full text-left"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="text-[10px] font-mono text-black/30 uppercase">{item.category}</p>
+                      {item.status === 'Out of Stock' && (
+                        <span className="text-[8px] font-mono bg-red-50 text-red-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">Out of Stock</span>
+                      )}
+                    </div>
+                    <p className="font-medium text-[#141414] group-hover:text-black transition-colors">{item.name}</p>
+                    <p className="text-sm font-serif italic mt-2">N$ {item.price}</p>
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredOrders.length === 0 ? (
+                <div className="bg-white p-12 rounded-2xl border border-black/5 text-center">
+                  <p className="text-sm text-black/40">No active orders found.</p>
+                </div>
+              ) : (
+                filteredOrders.map((order) => (
+                  <motion.div 
+                    key={order.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm"
+                  >
+                    <div className="flex flex-col md:flex-row justify-between gap-4 mb-4">
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="text-lg font-serif italic">
+                            {order.customer_name ? `Guest: ${order.customer_name}` : `Table ${order.table_number}`}
+                          </h3>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider
+                            ${order.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 
+                              order.status === 'Accepted' ? 'bg-blue-50 text-blue-600' :
+                              order.status === 'Preparing' ? 'bg-purple-50 text-purple-600' :
+                              order.status === 'Serving' ? 'bg-indigo-50 text-indigo-600' :
+                              order.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' :
+                              'bg-gray-50 text-gray-600'}`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-black/40 font-mono uppercase">
+                          {new Date(order.created_at).toLocaleTimeString()} • {order.items.length} items
+                        </p>
+                        {order.estimated_arrival && (
+                          <p className="text-[10px] font-mono text-blue-600 uppercase mt-1">
+                            Est. Arrival: {order.estimated_arrival}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-serif italic">N$ {order.total_price}</p>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-black/5 pt-4 mb-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {order.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between text-sm">
+                            <span className="text-black/60">{item.name} x {item.qty}</span>
+                            <span className="font-mono text-xs">N$ {item.price * item.qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-end gap-4">
+                      <div className="flex flex-wrap gap-2">
+                        {order.status === 'Pending' && (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'Accepted', estArrival[order.id])}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition-colors"
+                          >
+                            Accept Order
+                          </button>
+                        )}
+                        {order.status === 'Accepted' && (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'Preparing', estArrival[order.id])}
+                            className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-medium hover:bg-purple-700 transition-colors"
+                          >
+                            Start Preparing
+                          </button>
+                        )}
+                        {order.status === 'Preparing' && (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'Serving')}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
+                          >
+                            Ready to Serve
+                          </button>
+                        )}
+                        {order.status === 'Serving' && (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'Completed')}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 transition-colors"
+                          >
+                            Mark Completed
+                          </button>
+                        )}
+                        {order.status !== 'Cancelled' && order.status !== 'Completed' && order.status !== 'Paid' && (
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'Cancelled')}
+                            className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+
+                      {(order.status === 'Pending' || order.status === 'Accepted') && (
+                        <div className="flex-1 min-w-[150px]">
+                          <label className="block text-[8px] font-mono uppercase text-black/30 mb-1">Set Est. Arrival (e.g. 20 mins)</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. 15:30 or 20 mins"
+                            value={estArrival[order.id] || ''}
+                            onChange={(e) => setEstArrival({ ...estArrival, [order.id]: e.target.value })}
+                            className="w-full px-3 py-1.5 bg-gray-50 border border-black/5 rounded-lg text-xs focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+
+        {activeSubTab === 'menu' && cart.length > 0 && (
+          <div className="w-full lg:w-96 bg-white rounded-2xl border border-black/5 shadow-sm flex flex-col sticky bottom-0 lg:relative">
           <div className="p-6 border-bottom border-black/5">
             <h3 className="text-lg font-serif italic mb-4">Current Order</h3>
             <input 
@@ -485,13 +995,14 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
             <button 
               disabled={!table}
               onClick={handlePrintRequest}
-              className="w-full py-4 bg-[#141414] text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black/90 transition-colors"
+              className="w-full py-3 sm:py-4 bg-[#141414] text-white rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black/90 transition-colors"
             >
               Print Receipt
             </button>
           </div>
         </div>
       )}
+      </div>
 
       <AnimatePresence>
         {showPrintConfirm && (
@@ -585,6 +1096,40 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
                   />
                 </div>
+                {type === 'Bar' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Cost Price (N$)</label>
+                      <input 
+                        type="number" 
+                        required
+                        value={newItem.costPrice}
+                        onChange={(e) => setNewItem({...newItem, costPrice: parseFloat(e.target.value)})}
+                        className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Initial Stock</label>
+                      <input 
+                        type="number" 
+                        required
+                        value={newItem.stock}
+                        onChange={(e) => setNewItem({...newItem, stock: parseInt(e.target.value)})}
+                        className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Min Stock Alert</label>
+                      <input 
+                        type="number" 
+                        required
+                        value={newItem.minStock}
+                        onChange={(e) => setNewItem({...newItem, minStock: parseInt(e.target.value)})}
+                        className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
+                      />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Category</label>
                   <input 
@@ -608,9 +1153,11 @@ const POSModule = ({ type, menu, isAdmin }: { type: 'Restaurant' | 'Bar', menu: 
   );
 };
 
-const RoomsModule = ({ rooms, isAdmin }: { rooms: Room[], isAdmin: boolean }) => {
+const RoomsModule = ({ rooms, isAdmin, userRole }: { rooms: Room[], isAdmin: boolean, userRole?: string }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newRoom, setNewRoom] = useState({ number: '', category: 'Single', price: 0, status: 'Available' as any });
+
+  const canManage = isAdmin || userRole === 'Receptionist';
 
   const handleAddRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -633,22 +1180,22 @@ const RoomsModule = ({ rooms, isAdmin }: { rooms: Room[], isAdmin: boolean }) =>
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-serif italic">Room Management</h2>
-        <div className="flex gap-4">
-          {isAdmin && (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h2 className="text-xl md:text-2xl font-serif italic">Room Management</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          {canManage && (
             <button 
               onClick={() => setIsAdding(true)}
-              className="px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-sm font-medium"
+              className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium whitespace-nowrap"
             >
               Add Room
             </button>
           )}
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-black/5 text-xs font-mono">
+          <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white rounded-xl border border-black/5 text-[10px] sm:text-xs font-mono">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
             <span>Available</span>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-black/5 text-xs font-mono">
+          <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white rounded-xl border border-black/5 text-[10px] sm:text-xs font-mono">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
             <span>Occupied</span>
           </div>
@@ -662,7 +1209,7 @@ const RoomsModule = ({ rooms, isAdmin }: { rooms: Room[], isAdmin: boolean }) =>
             whileHover={{ y: -4 }}
             className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-md transition-all relative group"
           >
-            {isAdmin && (
+            {canManage && (
               <button 
                 onClick={() => deleteRoom(room.id)}
                 className="absolute top-4 right-4 p-2 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600"
@@ -687,7 +1234,7 @@ const RoomsModule = ({ rooms, isAdmin }: { rooms: Room[], isAdmin: boolean }) =>
                 <span className="text-black/40">Rate</span>
                 <span className="font-medium">N$ {room.price} / night</span>
               </div>
-              <button className="w-full py-3 bg-gray-50 border border-black/5 rounded-xl text-xs font-mono uppercase tracking-widest hover:bg-black hover:text-white transition-all">
+              <button className="w-full py-2.5 sm:py-3 bg-gray-50 border border-black/5 rounded-xl text-[10px] sm:text-xs font-mono uppercase tracking-widest hover:bg-black hover:text-white transition-all">
                 {room.status === 'Available' ? 'Check In' : 'Manage'}
               </button>
             </div>
@@ -756,10 +1303,12 @@ const RoomsModule = ({ rooms, isAdmin }: { rooms: Room[], isAdmin: boolean }) =>
   );
 };
 
-const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], services: any[], isAdmin: boolean }) => {
+const LaundryModule = ({ orders, services, isAdmin, userRole }: { orders: LaundryOrder[], services: any[], isAdmin: boolean, userRole?: string }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'orders' | 'services'>('orders');
+  
+  const canManage = isAdmin || userRole === 'Laundry' || userRole === 'Receptionist';
   const [newOrder, setNewOrder] = useState({ room_number: '', guest_name: '', total_price: 0, status: 'Received' as any });
   const [newService, setNewService] = useState({ name: '', price: 0 });
   const [cart, setCart] = useState<{ item: any, qty: number }[]>([]);
@@ -829,31 +1378,35 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
     }
   };
 
-  const updateStatus = async (id: string, status: string) => {
+  const updateStatus = async (id: string, status: string, estimatedArrival?: string) => {
     try {
-      await updateDoc(doc(db, 'laundry_orders', id), { status });
+      const updateData: any = { status };
+      if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
+      await updateDoc(doc(db, 'laundry_orders', id), updateData);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'laundry_orders');
     }
   };
 
+  const [estArrival, setEstArrival] = useState<{ [key: string]: string }>({});
+
   return (
-    <div className="flex gap-8 h-[calc(100vh-12rem)]">
-      <div className="flex-1 space-y-8 overflow-y-auto pr-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <h2 className="text-2xl font-serif italic">Laundry Service</h2>
-            <div className="flex bg-white/50 p-1 rounded-xl border border-black/5">
+    <div className="flex flex-col lg:flex-row gap-8 h-auto lg:h-[calc(100vh-12rem)]">
+      <div className="flex-1 space-y-8 overflow-y-auto pr-0 lg:pr-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
+            <h2 className="text-xl md:text-2xl font-serif italic">Laundry Service</h2>
+            <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit overflow-x-auto">
               <button 
                 onClick={() => setActiveSubTab('orders')}
-                className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                   ${activeSubTab === 'orders' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
               >
                 Orders
               </button>
               <button 
                 onClick={() => setActiveSubTab('services')}
-                className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                   ${activeSubTab === 'services' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
               >
                 Services
@@ -863,15 +1416,15 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
           {activeSubTab === 'orders' ? (
             <button 
               onClick={() => setIsAdding(true)}
-              className="px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-sm font-medium"
+              className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium w-full sm:w-auto"
             >
               New Laundry Order
             </button>
           ) : (
-            isAdmin && (
+            canManage && (
               <button 
                 onClick={() => setIsAddingService(true)}
-                className="px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-sm font-medium"
+                className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium w-full sm:w-auto"
               >
                 Add Service Type
               </button>
@@ -893,11 +1446,18 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
                 )}
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <p className="text-[10px] font-mono text-black/30 uppercase tracking-widest">Room {order.room_number}</p>
+                    <p className="text-[10px] font-mono text-black/30 uppercase tracking-widest">
+                      {order.room_number ? `Room ${order.room_number}` : `Guest: ${order.guest_name}`}
+                    </p>
                     <h3 className="text-lg font-serif italic">{order.guest_name}</h3>
                   </div>
                   <span className="text-xs font-mono text-black/40">{new Date(order.created_at).toLocaleTimeString()}</span>
                 </div>
+                {order.estimated_arrival && (
+                  <p className="text-[10px] font-mono text-blue-600 uppercase mb-2">
+                    Est. Delivery: {order.estimated_arrival}
+                  </p>
+                )}
                 <div className="flex items-center justify-between mb-6">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-wider
                     ${order.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
@@ -905,16 +1465,29 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
                   </span>
                   <p className="font-serif italic">N$ {order.total_price}</p>
                 </div>
-                <select 
-                  value={order.status}
-                  onChange={(e) => updateStatus(order.id, e.target.value)}
-                  className="w-full p-2 bg-gray-50 border border-black/5 rounded-xl text-xs font-mono uppercase"
-                >
-                  <option value="Received">Received</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Ready">Ready</option>
-                  <option value="Delivered">Delivered</option>
-                </select>
+                <div className="space-y-2">
+                  {canManage && (
+                    <select 
+                      value={order.status}
+                      onChange={(e) => updateStatus(order.id, e.target.value, estArrival[order.id])}
+                      className="w-full p-2 bg-gray-50 border border-black/5 rounded-xl text-xs font-mono uppercase"
+                    >
+                      <option value="Received">Received</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Ready">Ready</option>
+                      <option value="Delivered">Delivered</option>
+                    </select>
+                  )}
+                  {order.status !== 'Delivered' && (
+                    <input 
+                      type="text"
+                      placeholder="Est. Delivery (e.g. 2 hours)"
+                      value={estArrival[order.id] || ''}
+                      onChange={(e) => setEstArrival({ ...estArrival, [order.id]: e.target.value })}
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-black/5 rounded-lg text-[10px] focus:outline-none"
+                    />
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -931,7 +1504,7 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
                   <p className="font-medium">{service.name}</p>
                   <p className="text-xs text-black/40 font-mono">N$ {service.price}</p>
                 </div>
-                {isAdmin && (
+                {canManage && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); deleteService(service.id); }}
                     className="p-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600"
@@ -946,7 +1519,7 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
       </div>
 
       {!isAdmin && cart.length > 0 && (
-        <div className="w-96 bg-white rounded-2xl border border-black/5 shadow-sm flex flex-col">
+        <div className="w-full lg:w-96 bg-white rounded-2xl border border-black/5 shadow-sm flex flex-col sticky bottom-0 lg:relative">
           <div className="p-6 border-bottom border-black/5">
             <h3 className="text-lg font-serif italic mb-4">Laundry Receipt</h3>
             <div className="space-y-4">
@@ -987,7 +1560,7 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
             <button 
               disabled={!newOrder.room_number || !newOrder.guest_name}
               onClick={handlePrintRequest}
-              className="w-full py-4 bg-[#141414] text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black/90 transition-colors"
+              className="w-full py-3 sm:py-4 bg-[#141414] text-white rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black/90 transition-colors"
             >
               Print Receipt
             </button>
@@ -1153,13 +1726,14 @@ const LaundryModule = ({ orders, services, isAdmin }: { orders: LaundryOrder[], 
   );
 };
 
-const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[], services: any[], bookings: any[], isAdmin: boolean }) => {
+const ConferenceModule = ({ rooms, services, bookings, isAdmin, userRole }: { rooms: any[], services: any[], bookings: any[], isAdmin: boolean, userRole?: string }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [selectedFacility, setSelectedFacility] = useState<any>(null);
   const [activeSubTab, setActiveSubTab] = useState<'facilities' | 'services' | 'bookings'>('facilities');
   
+  const canManage = isAdmin || userRole === 'Receptionist';
   const [newRoom, setNewRoom] = useState({ name: '', capacity: 0, price_per_hour: 0, status: 'Available' as any });
   const [newService, setNewService] = useState({ name: '', price: 0 });
   const [newBooking, setNewBooking] = useState({ 
@@ -1260,27 +1834,27 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <h2 className="text-2xl font-serif italic">Conference Facilities</h2>
-          <div className="flex bg-white/50 p-1 rounded-xl border border-black/5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
+          <h2 className="text-xl md:text-2xl font-serif italic">Conference Facilities</h2>
+          <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit overflow-x-auto">
             <button 
               onClick={() => setActiveSubTab('facilities')}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === 'facilities' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
             >
               Facilities
             </button>
             <button 
               onClick={() => setActiveSubTab('bookings')}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === 'bookings' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
             >
               Bookings
             </button>
             <button 
               onClick={() => setActiveSubTab('services')}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === 'services' ? 'bg-black text-white shadow-md' : 'text-black/40 hover:text-black/60'}`}
             >
               Services
@@ -1288,19 +1862,19 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
           </div>
         </div>
         {activeSubTab === 'facilities' ? (
-          isAdmin && (
+          canManage && (
             <button 
               onClick={() => setIsAdding(true)}
-              className="px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-sm font-medium"
+              className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium w-full sm:w-auto"
             >
               Add Facility
             </button>
           )
         ) : activeSubTab === 'services' ? (
-          isAdmin && (
+          canManage && (
             <button 
               onClick={() => setIsAddingService(true)}
-              className="px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-sm font-medium"
+              className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium w-full sm:w-auto"
             >
               Add Service
             </button>
@@ -1312,7 +1886,7 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {rooms.map((room) => (
             <div key={room.id} className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm relative group">
-              {isAdmin && (
+              {canManage && (
                 <button 
                   onClick={() => deleteFacility(room.id)}
                   className="absolute top-4 right-4 p-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600"
@@ -1344,8 +1918,8 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
           ))}
         </div>
       ) : activeSubTab === 'bookings' ? (
-        <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-gray-50 border-b border-black/5">
                 <th className="p-6 text-[10px] font-mono uppercase text-black/40">Facility</th>
@@ -1374,7 +1948,7 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
                     </span>
                   </td>
                   <td className="p-6 text-right">
-                    {isAdmin && (
+                    {canManage && (
                       <button 
                         onClick={() => deleteBooking(booking.id)}
                         className="text-red-400 hover:text-red-600 transition-colors"
@@ -1396,7 +1970,7 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin }: { rooms: any[]
                 <p className="font-medium">{service.name}</p>
                 <p className="text-xs text-black/40 font-mono">N$ {service.price}</p>
               </div>
-              {isAdmin && (
+              {canManage && (
                 <button 
                   onClick={() => deleteService(service.id)}
                   className="p-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600"
@@ -1657,19 +2231,19 @@ const StaffModule = ({ users }: { users: User[] }) => {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-serif italic">Staff Management</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h2 className="text-xl md:text-2xl font-serif italic">Staff Management</h2>
         <button 
           onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all"
+          className="flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all w-full sm:w-auto text-xs sm:text-sm font-medium"
         >
-          <Plus size={18} />
-          <span className="text-sm font-medium">Add Staff</span>
+          <Plus size={16} />
+          <span>Add Staff</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
             <tr className="bg-gray-50 border-b border-black/5">
               <th className="p-6 text-[10px] font-mono uppercase text-black/40">Name</th>
@@ -1797,10 +2371,506 @@ const StaffModule = ({ users }: { users: User[] }) => {
   );
 };
 
+const CustomerPortal = ({ user }: { user: User }) => {
+  const [activeTab, setActiveTab] = useState('home');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [laundryServices, setLaundryServices] = useState<LaundryService[]>([]);
+  const [conferenceRooms, setConferenceRooms] = useState<ConferenceRoom[]>([]);
+  const [conferenceServices, setConferenceServices] = useState<ConferenceService[]>([]);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [myLaundryOrders, setMyLaundryOrders] = useState<LaundryOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubRooms = onSnapshot(collection(db, 'rooms'), (snap) => {
+      setRooms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room)));
+    });
+    const unsubMenu = onSnapshot(collection(db, 'menu_items'), (snap) => {
+      setMenu(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem)));
+    });
+    const unsubLaundry = onSnapshot(collection(db, 'laundry_services'), (snap) => {
+      setLaundryServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryService)));
+    });
+    const unsubConf = onSnapshot(collection(db, 'conference_rooms'), (snap) => {
+      setConferenceRooms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConferenceRoom)));
+    });
+    const unsubConfServ = onSnapshot(collection(db, 'conference_services'), (snap) => {
+      setConferenceServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConferenceService)));
+    });
+
+    // Listen to orders placed by this customer
+    const qOrders = query(collection(db, 'orders'), where('customer_email', '==', user.email));
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      setMyOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+    });
+
+    const qLaundryOrders = query(collection(db, 'laundry_orders'), where('customer_email', '==', user.email));
+    const unsubLaundryOrders = onSnapshot(qLaundryOrders, (snap) => {
+      setMyLaundryOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryOrder)));
+    });
+
+    setLoading(false);
+    return () => {
+      unsubRooms();
+      unsubMenu();
+      unsubLaundry();
+      unsubConf();
+      unsubConfServ();
+      unsubOrders();
+      unsubLaundryOrders();
+    };
+  }, [user.email]);
+
+  const placeOrder = async (item: MenuItem) => {
+    try {
+      await addDoc(collection(db, 'orders'), {
+        customer_email: user.email,
+        customer_name: user.name,
+        items: [{ ...item, quantity: 1 }],
+        total_price: item.price,
+        status: 'Pending',
+        type: item.type,
+        created_at: new Date().toISOString()
+      });
+      alert('Order placed successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to place order');
+    }
+  };
+
+  const placeLaundryOrder = async (service: LaundryService) => {
+    try {
+      await addDoc(collection(db, 'laundry_orders'), {
+        customer_email: user.email,
+        guest_name: user.name,
+        items: [{ ...service, quantity: 1 }],
+        total_price: service.price,
+        status: 'Received',
+        created_at: new Date().toISOString()
+      });
+      alert('Laundry request sent!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send request');
+    }
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-mono">Loading Portal...</div>;
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-black/5 p-4 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <h1 className="text-xl font-serif italic">Pahukeni Portal</h1>
+            <div className="hidden md:flex items-center gap-1 text-[10px] font-mono uppercase text-black/40">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Guest Access
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-mono text-black/60 hidden sm:block">{user.name}</span>
+            <button 
+              onClick={() => signOut(auth)}
+              className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+              title="Sign Out"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
+        {/* Mobile Menu Overlay */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Mobile Menu Drawer */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.aside
+              initial={{ x: -300 }}
+              animate={{ x: 0 }}
+              exit={{ x: -300 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 bottom-0 w-64 bg-white z-40 p-6 shadow-2xl lg:hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-serif italic">Menu</h2>
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-2 flex-1">
+                {[
+                  { id: 'home', label: 'Home', icon: HomeIcon },
+                  { id: 'rooms', label: 'Rooms', icon: Bed },
+                  { id: 'dining', label: 'Dining', icon: Utensils },
+                  { id: 'laundry', label: 'Laundry', icon: WashingMachine },
+                  { id: 'conference', label: 'Conference', icon: Users },
+                  { id: 'orders', label: 'My Orders', icon: ClipboardList },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                      activeTab === item.id 
+                        ? 'bg-black text-white shadow-lg shadow-black/10' 
+                        : 'bg-white text-black/60 hover:bg-gray-50 border border-black/5'
+                    }`}
+                  >
+                    <item.icon size={18} />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="pt-6 border-t border-black/5">
+                <button 
+                  onClick={() => signOut(auth)}
+                  className="w-full flex items-center gap-3 p-4 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                >
+                  <LogOut size={18} />
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        {/* Desktop Sidebar Navigation */}
+        <aside className="hidden lg:block lg:col-span-1 space-y-2">
+          {[
+            { id: 'home', label: 'Home', icon: HomeIcon },
+            { id: 'rooms', label: 'Rooms', icon: Bed },
+            { id: 'dining', label: 'Dining', icon: Utensils },
+            { id: 'laundry', label: 'Laundry', icon: WashingMachine },
+            { id: 'conference', label: 'Conference', icon: Users },
+            { id: 'orders', label: 'My Orders', icon: ClipboardList },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                activeTab === item.id 
+                  ? 'bg-black text-white shadow-lg shadow-black/10' 
+                  : 'bg-white text-black/60 hover:bg-gray-50 border border-black/5'
+              }`}
+            >
+              <item.icon size={18} />
+              <span className="text-sm font-medium">{item.label}</span>
+            </button>
+          ))}
+        </aside>
+
+        {/* Main Content */}
+        <main className="lg:col-span-3">
+          <AnimatePresence mode="wait">
+            {activeTab === 'home' && (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-8"
+              >
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-3xl font-serif italic mb-4">Welcome back, {user.name}</h2>
+                  <p className="text-black/60 leading-relaxed">
+                    Experience the finest hospitality at Pahukeni Pension. Browse our services, 
+                    order from our restaurant, or book your next stay directly from this portal.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-emerald-900 text-white p-8 rounded-2xl shadow-xl relative overflow-hidden group">
+                    <div className="relative z-10">
+                      <h3 className="text-xl font-serif italic mb-2">Ready for Dinner?</h3>
+                      <p className="text-white/70 text-sm mb-6">Explore our restaurant menu and order to your room.</p>
+                      <button 
+                        onClick={() => setActiveTab('dining')}
+                        className="px-6 py-2 bg-white text-emerald-900 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors"
+                      >
+                        View Menu
+                      </button>
+                    </div>
+                    <Utensils className="absolute -right-4 -bottom-4 text-white/10 w-32 h-32 transform -rotate-12 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <div className="bg-[#141414] text-white p-8 rounded-2xl shadow-xl relative overflow-hidden group">
+                    <div className="relative z-10">
+                      <h3 className="text-xl font-serif italic mb-2">Need Laundry?</h3>
+                      <p className="text-white/70 text-sm mb-6">Professional cleaning services at your fingertips.</p>
+                      <button 
+                        onClick={() => setActiveTab('laundry')}
+                        className="px-6 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+                      >
+                        Request Service
+                      </button>
+                    </div>
+                    <WashingMachine className="absolute -right-4 -bottom-4 text-white/10 w-32 h-32 transform rotate-12 group-hover:scale-110 transition-transform" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'rooms' && (
+              <motion.div
+                key="rooms"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              >
+                {rooms.map((room) => (
+                  <div key={room.id} className="bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm group">
+                    <div className="h-48 overflow-hidden relative">
+                      <img 
+                        src={room.imageUrl || `https://picsum.photos/seed/room${room.number}/800/600`} 
+                        alt={`Room ${room.number}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-mono uppercase tracking-wider">
+                        {room.category}
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-serif italic">Room {room.number}</h3>
+                          <p className="text-xs text-black/40 font-mono uppercase">{room.status}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-serif italic">N$ {room.price}</p>
+                          <p className="text-[10px] text-black/40 font-mono uppercase">per night</p>
+                        </div>
+                      </div>
+                      <button 
+                        disabled={room.status !== 'Available'}
+                        className="w-full py-3 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-30 hover:bg-black/90 transition-colors"
+                      >
+                        {room.status === 'Available' ? 'Book Now' : 'Unavailable'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+
+            {activeTab === 'dining' && (
+              <motion.div
+                key="dining"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {menu.map((item) => (
+                    <div key={item.id} className="bg-white p-4 rounded-2xl border border-black/5 flex gap-4 shadow-sm">
+                      <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                        <img 
+                          src={item.imageUrl || `https://picsum.photos/seed/${item.name}/400/400`} 
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <h3 className="font-serif italic">{item.name}</h3>
+                            <span className="text-sm font-serif italic">N$ {item.price}</span>
+                          </div>
+                          <p className="text-[10px] font-mono text-black/40 uppercase mt-1">{item.category} • {item.type}</p>
+                        </div>
+                        <button 
+                          onClick={() => placeOrder(item)}
+                          disabled={item.status === 'Out of Stock'}
+                          className="mt-2 text-xs font-mono uppercase text-emerald-600 hover:text-emerald-700 font-bold disabled:text-black/20"
+                        >
+                          {item.status === 'Available' ? '+ Add to Order' : 'Out of Stock'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'laundry' && (
+              <motion.div
+                key="laundry"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-6"
+              >
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">Laundry Services</h2>
+                  <div className="space-y-4">
+                    {laundryServices.map((service) => (
+                      <div key={service.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-black/5">
+                        <div className="flex items-center gap-4">
+                          <div className="p-2 bg-white rounded-lg border border-black/5">
+                            <WashingMachine size={16} className="text-black/40" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{service.name}</p>
+                            <p className="text-[10px] font-mono text-black/40 uppercase">Professional Cleaning</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm font-serif italic">N$ {service.price}</span>
+                          <button 
+                            onClick={() => placeLaundryOrder(service)}
+                            className="px-4 py-2 bg-black text-white rounded-lg text-xs font-medium hover:bg-black/90 transition-colors"
+                          >
+                            Request
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'conference' && (
+              <motion.div
+                key="conference"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {conferenceRooms.map((room) => (
+                    <div key={room.id} className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-serif italic">{room.name}</h3>
+                          <p className="text-xs text-black/40 font-mono uppercase">Capacity: {room.capacity} People</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-serif italic">N$ {room.price_per_hour}</p>
+                          <p className="text-[10px] text-black/40 font-mono uppercase">per hour</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-xs text-black/60">
+                          <CheckCircle2 size={14} className="text-emerald-500" />
+                          <span>High-speed WiFi</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-black/60">
+                          <CheckCircle2 size={14} className="text-emerald-500" />
+                          <span>Air Conditioning</span>
+                        </div>
+                      </div>
+                      <button className="w-full py-3 border border-black/10 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                        Inquire for Booking
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">Additional Services</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {conferenceServices.map((service) => (
+                      <div key={service.id} className="p-4 bg-gray-50 rounded-xl border border-black/5">
+                        <p className="text-sm font-medium mb-1">{service.name}</p>
+                        <p className="text-xs font-serif italic text-black/40">N$ {service.price}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'orders' && (
+              <motion.div
+                key="orders"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">Recent Orders</h2>
+                  <div className="space-y-4">
+                    {[...myOrders, ...myLaundryOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((order) => (
+                      <div key={order.id} className="p-4 bg-gray-50 rounded-xl border border-black/5 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded-lg ${
+                            order.status === 'Completed' || order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : 
+                            order.status === 'Accepted' || order.status === 'Preparing' ? 'bg-blue-600 text-white' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            <Clock size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">
+                              {'type' in order ? `${order.type} Order` : 'Laundry Service'}
+                            </p>
+                            <p className="text-[10px] font-mono text-black/40 uppercase">
+                              {new Date(order.created_at).toLocaleString()}
+                            </p>
+                            {order.estimated_arrival && (
+                              <p className="text-[10px] font-mono text-blue-600 uppercase mt-1 font-bold">
+                                Est. {'type' in order ? 'Arrival' : 'Delivery'}: {order.estimated_arrival}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-serif italic">N$ {order.total_price}</p>
+                          <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
+                            order.status === 'Completed' || order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : 
+                            order.status === 'Accepted' || order.status === 'Preparing' ? 'bg-blue-600 text-white animate-pulse' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {myOrders.length === 0 && myLaundryOrders.length === 0 && (
+                      <p className="text-center py-8 text-black/20 font-mono text-sm">No orders yet</p>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -1842,30 +2912,17 @@ export default function App() {
 
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            // Allow login without strict verification for internal staff
             setUser({ id: userDoc.id, ...userData } as User);
           } else {
-            // Check if this is the first user ever
-            const usersSnap = await getDocs(collection(db, 'users'));
-            if (usersSnap.empty) {
-              // Bootstrap first admin
-              const firstAdmin: User = {
-                id: firebaseUser.email,
-                username: firebaseUser.email.split('@')[0],
-                name: firebaseUser.displayName || 'Initial Admin',
-                role: 'Admin',
-                email: firebaseUser.email
-              };
-              await setDoc(doc(db, 'users', firebaseUser.email), firstAdmin);
-              setUser(firstAdmin);
-              seedData();
-            } else {
-              // User not registered
-              console.error('User not registered in staff list');
-              await signOut(auth);
-              alert('Access Denied: Your account is not registered in the staff list. Please contact the administrator.');
-              setUser(null);
-            }
+            // If user doesn't exist in Firestore, they are a new customer
+            const newCustomerData = {
+              username: firebaseUser.email.split('@')[0],
+              name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+              role: 'Customer',
+              email: firebaseUser.email
+            };
+            await setDoc(doc(db, 'users', firebaseUser.email), newCustomerData);
+            setUser({ id: firebaseUser.email, ...newCustomerData } as User);
           }
         } catch (error) {
           console.error('Error fetching user profile:', error);
@@ -1904,9 +2961,12 @@ export default function App() {
       setBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'room_bookings'));
 
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, 'users'));
+    let unsubUsers = () => {};
+    if (user.role === 'Admin') {
+      unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+      }, (error) => handleFirestoreError(error, OperationType.GET, 'users'));
+    }
 
     const unsubConf = onSnapshot(collection(db, 'conference_rooms'), (snapshot) => {
       setConferenceRooms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -1955,22 +3015,42 @@ export default function App() {
       const roomSnap = await getDocs(collection(db, 'rooms'));
       if (roomSnap.empty) {
         const initialRooms = [
-          { number: '101', category: 'Single', price: 450, status: 'Available' },
-          { number: '102', category: 'Single', price: 450, status: 'Available' },
-          { number: '201', category: 'Double', price: 750, status: 'Occupied' },
-          { number: '202', category: 'Double', price: 750, status: 'Available' },
-          { number: '301', category: 'VIP', price: 1200, status: 'Available' },
+          { number: '101', category: 'Single', price: 450, status: 'Available', imageUrl: 'https://picsum.photos/seed/room101/800/600' },
+          { number: '102', category: 'Single', price: 450, status: 'Available', imageUrl: 'https://picsum.photos/seed/room102/800/600' },
+          { number: '201', category: 'Double', price: 750, status: 'Occupied', imageUrl: 'https://picsum.photos/seed/room201/800/600' },
+          { number: '202', category: 'Double', price: 750, status: 'Available', imageUrl: 'https://picsum.photos/seed/room202/800/600' },
+          { number: '301', category: 'VIP', price: 1200, status: 'Available', imageUrl: 'https://picsum.photos/seed/room301/800/600' },
         ];
         for (const r of initialRooms) await addDoc(collection(db, 'rooms'), r);
 
         const initialMenu = [
-          { name: 'T-Bone Steak', price: 180, category: 'Main', type: 'Restaurant' },
-          { name: 'Grilled Hake', price: 140, category: 'Main', type: 'Restaurant' },
-          { name: 'Greek Salad', price: 85, category: 'Starter', type: 'Restaurant' },
-          { name: 'Windhoek Lager', price: 35, category: 'Drinks', type: 'Bar' },
-          { name: 'Red Wine Glass', price: 55, category: 'Drinks', type: 'Bar' },
+          { name: 'T-Bone Steak', price: 180, category: 'Main', type: 'Restaurant', status: 'Available', imageUrl: 'https://picsum.photos/seed/steak/800/600' },
+          { name: 'Grilled Hake', price: 140, category: 'Main', type: 'Restaurant', status: 'Available', imageUrl: 'https://picsum.photos/seed/fish/800/600' },
+          { name: 'Greek Salad', price: 85, category: 'Starter', type: 'Restaurant', status: 'Available', imageUrl: 'https://picsum.photos/seed/salad/800/600' },
+          { name: 'Windhoek Lager', price: 35, category: 'Drinks', type: 'Bar', status: 'Available', imageUrl: 'https://picsum.photos/seed/beer/800/600', stock: 50, costPrice: 20, minStock: 10 },
+          { name: 'Red Wine Glass', price: 55, category: 'Drinks', type: 'Bar', status: 'Available', imageUrl: 'https://picsum.photos/seed/wine/800/600', stock: 24, costPrice: 30, minStock: 5 },
         ];
         for (const m of initialMenu) await addDoc(collection(db, 'menu_items'), m);
+
+        const initialLaundry = [
+          { name: 'Wash & Fold', price: 50 },
+          { name: 'Dry Cleaning', price: 120 },
+          { name: 'Ironing Only', price: 30 },
+        ];
+        for (const s of initialLaundry) await addDoc(collection(db, 'laundry_services'), s);
+
+        const initialConf = [
+          { name: 'Main Hall', capacity: 200, price_per_hour: 500, status: 'Available' },
+          { name: 'Boardroom A', capacity: 15, price_per_hour: 150, status: 'Available' },
+        ];
+        for (const c of initialConf) await addDoc(collection(db, 'conference_rooms'), c);
+
+        const initialConfServices = [
+          { name: 'Projector & Screen', price: 200 },
+          { name: 'Catering (per person)', price: 150 },
+          { name: 'PA System', price: 300 },
+        ];
+        for (const s of initialConfServices) await addDoc(collection(db, 'conference_services'), s);
 
         // Create admin user doc
         if (auth.currentUser && auth.currentUser.email) {
@@ -1998,6 +3078,10 @@ export default function App() {
 
   if (!user) return <LoginPage />;
 
+  if (user.role === 'Customer') {
+    return <CustomerPortal user={user} />;
+  }
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Receptionist'] },
     { id: 'rooms', label: 'Rooms', icon: Bed, roles: ['Admin', 'Receptionist'] },
@@ -2013,64 +3097,103 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#E4E3E0] flex">
-        {/* Sidebar */}
-      <aside className="w-72 bg-[#141414] text-white flex flex-col">
-        <div className="p-8">
-          <h1 className="text-2xl font-serif italic mb-1">Pahukeni</h1>
-          <p className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em]">Pension Hotel</p>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-2">
-          {filteredMenuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group
-                ${activeTab === item.id ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
-            >
-              <item.icon size={18} className={activeTab === item.id ? 'text-white' : 'text-white/40 group-hover:text-white'} />
-              <span className="text-sm font-medium">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-4 mt-auto">
-          <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                <Users size={14} />
-              </div>
-              <div className="overflow-hidden">
-                <p className="text-xs font-medium truncate">{user?.name || 'Administrator'}</p>
-                <p className="text-[10px] font-mono text-white/30 uppercase">{user?.role || 'Admin'}</p>
-              </div>
+      <div className="min-h-screen bg-[#E4E3E0] flex flex-col lg:flex-row">
+        {/* Mobile Header */}
+        <div className="lg:hidden bg-[#141414] text-white p-4 flex items-center justify-between sticky top-0 z-50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+              <Bed size={16} />
+            </div>
+            <div>
+              <h1 className="text-lg font-serif italic leading-none">Pahukeni</h1>
+              <p className="text-[8px] font-mono text-white/40 uppercase tracking-widest">Pension Hotel</p>
             </div>
           </div>
           <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
-            <LogOut size={18} />
-            <span className="text-sm font-medium">Logout</span>
+            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
-      </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-12 overflow-y-auto">
-        <header className="flex items-center justify-between mb-12">
-          <div>
-            <h2 className="text-3xl font-serif italic text-[#141414] capitalize">{activeTab}</h2>
-            <p className="text-xs font-mono text-black/40 uppercase tracking-widest mt-1">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
+        {/* Sidebar Overlay */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Sidebar */}
+        <aside className={`
+          fixed inset-y-0 left-0 w-72 bg-[#141414] text-white flex flex-col z-50 transition-transform duration-300 lg:relative lg:translate-x-0
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}>
+          <div className="p-8 hidden lg:block">
+            <h1 className="text-2xl font-serif italic mb-1">Pahukeni</h1>
+            <p className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em]">Pension Hotel</p>
           </div>
-          
-          <div className="flex items-center gap-4">
-            {/* Action buttons removed as per request */}
+
+          <nav className="flex-1 px-4 space-y-2 mt-8 lg:mt-0">
+            {filteredMenuItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group
+                  ${activeTab === item.id ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+              >
+                <item.icon size={18} className={activeTab === item.id ? 'text-white' : 'text-white/40 group-hover:text-white'} />
+                <span className="text-sm font-medium">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="p-4 mt-auto">
+            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                  <Users size={14} />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-xs font-medium truncate">{user?.name || 'Administrator'}</p>
+                  <p className="text-[10px] font-mono text-white/30 uppercase">{user?.role || 'Admin'}</p>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+            >
+              <LogOut size={18} />
+              <span className="text-sm font-medium">Logout</span>
+            </button>
           </div>
-        </header>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto">
+          <div className="max-w-7xl mx-auto w-full">
+            <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 md:mb-12 gap-4">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-serif italic text-[#141414] capitalize">{activeTab}</h2>
+              <p className="text-[10px] md:text-xs font-mono text-black/40 uppercase tracking-widest mt-1">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {/* Action buttons removed as per request */}
+            </div>
+          </header>
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -2082,7 +3205,7 @@ export default function App() {
           >
             {activeTab === 'dashboard' && (
               <>
-                <Dashboard stats={stats} bookings={laundry} />
+                <Dashboard stats={stats} bookings={bookings} />
                 {user?.role === 'Admin' && rooms.length === 0 && (
                   <div className="mt-8 p-6 bg-white rounded-2xl border border-dashed border-black/20 text-center">
                     <p className="text-sm text-black/40 mb-4">Database appears empty. Initialize with sample data?</p>
@@ -2096,13 +3219,19 @@ export default function App() {
                 )}
               </>
             )}
-            {activeTab === 'rooms' && <RoomsModule rooms={rooms} isAdmin={user?.role === 'Admin'} />}
+            {activeTab === 'rooms' && <RoomsModule rooms={rooms} isAdmin={user?.role === 'Admin'} userRole={user?.role} />}
             {activeTab === 'staff' && <StaffModule users={users} />}
             {(activeTab === 'restaurant' || activeTab === 'bar') && (
-              <POSModule type={activeTab === 'restaurant' ? 'Restaurant' : 'Bar'} menu={menu} isAdmin={user?.role === 'Admin'} />
+              <POSModule 
+                type={activeTab === 'restaurant' ? 'Restaurant' : 'Bar'} 
+                menu={menu} 
+                orders={orders}
+                isAdmin={user?.role === 'Admin'} 
+                userRole={user?.role}
+              />
             )}
-            {activeTab === 'laundry' && <LaundryModule orders={laundry} services={laundryServices} isAdmin={user?.role === 'Admin'} />}
-            {activeTab === 'conference' && <ConferenceModule rooms={conferenceRooms} services={conferenceServices} bookings={conferenceBookings} isAdmin={user?.role === 'Admin'} />}
+            {activeTab === 'laundry' && <LaundryModule orders={laundry} services={laundryServices} isAdmin={user?.role === 'Admin'} userRole={user?.role} />}
+            {activeTab === 'conference' && <ConferenceModule rooms={conferenceRooms} services={conferenceServices} bookings={conferenceBookings} isAdmin={user?.role === 'Admin'} userRole={user?.role} />}
             {activeTab !== 'dashboard' && activeTab !== 'restaurant' && activeTab !== 'bar' && activeTab !== 'staff' && activeTab !== 'laundry' && activeTab !== 'conference' && activeTab !== 'rooms' && (
               <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
                 <AlertCircle size={48} className="text-black/10 mb-4" />
@@ -2115,7 +3244,8 @@ export default function App() {
             )}
           </motion.div>
         </AnimatePresence>
-      </main>
+          </div>
+        </main>
       </div>
     </ErrorBoundary>
   );
