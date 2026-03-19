@@ -79,3 +79,15 @@ export interface LaundryService {
   name: string;
   price: number;
 }
+
+export interface Notification {
+  id: string;
+  userId?: string;
+  role?: string;
+  title: string;
+  message: string;
+  type: 'order' | 'laundry' | 'conference' | 'system';
+  read: boolean;
+  created_at: string;
+  orderId?: string;
+}

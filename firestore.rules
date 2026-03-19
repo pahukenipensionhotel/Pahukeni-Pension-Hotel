@@ -1,235 +1,140 @@
-rules_version = '2';
+// ===============================================================
+// Helper Functions
+// ===============================================================
+
+function isAuthenticated() {
+  return request.auth != null;
+}
+
+function isAdmin() {
+  return isAuthenticated() && (
+    (request.auth.token.email in ["btutu427@gmail.com", "pahukenipensionhotelcc@gmail.com"] && request.auth.token.email_verified == true) ||
+    (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Admin')
+  );
+}
+
+function isReceptionist() {
+  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Receptionist';
+}
+
+function isWaiter() {
+  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Waiter';
+}
+
+function isBarman() {
+  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Barman';
+}
+
+function isLaundryStaff() {
+  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Laundry';
+}
+
+function isCustomer() {
+  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Customer';
+}
+
+function isStaff() {
+  return isAuthenticated() && (
+    isAdmin() || 
+    (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && (
+      get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry']
+    ))
+  );
+}
+
+function isOwner(email) {
+  return isAuthenticated() && request.auth.token.email == email;
+}
+
+function hasOnlyAllowedFields(fields) {
+  return request.resource.data.keys().hasOnly(fields);
+}
+
+function isValidEmail(email) {
+  return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+}
+
+function isValidDateTime(dateTime) {
+  return dateTime is string && dateTime.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+}
+
+// ===============================================================
+// Domain Validators
+// ===============================================================
+
+function isValidUser(data) {
+  return data.username is string && data.username.size() > 0 && data.username.size() < 50 &&
+         data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+         data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry', 'Customer'] &&
+         (data.email == null || isValidEmail(data.email));
+}
+
+function isValidRoom(data) {
+  return data.number is string && data.number.size() > 0 && data.number.size() < 10 &&
+         data.category in ['Single', 'Double', 'VIP', 'Suite'] &&
+         data.price is number && data.price >= 0 &&
+         data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance'];
+}
+
+function isValidMenuItem(data) {
+  return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+         data.price is number && data.price >= 0 &&
+         data.category is string &&
+         data.type in ['Restaurant', 'Bar'] &&
+         data.status in ['Available', 'Out of Stock'];
+}
+
+function isValidOrder(data) {
+  return data.items is list && data.items.size() > 0 &&
+         data.total_price is number && data.total_price >= 0 &&
+         data.status in ['Pending', 'Accepted', 'Preparing', 'Serving', 'Completed', 'Cancelled', 'Paid'] &&
+         data.type in ['Restaurant', 'Bar'] &&
+         isValidDateTime(data.created_at);
+}
+
+function isValidLaundryOrder(data) {
+  return data.guest_name is string && data.guest_name.size() > 0 &&
+         data.items is list && data.items.size() > 0 &&
+         data.total_price is number && data.total_price >= 0 &&
+         data.status in ['Pending', 'In Progress', 'Ready', 'Delivered'] &&
+         isValidDateTime(data.created_at);
+}
+
+function isValidConferenceBooking(data) {
+  return data.room_id is string &&
+         data.client_name is string && data.client_name.size() > 0 &&
+         isValidDateTime(data.start_time) &&
+         isValidDateTime(data.end_time) &&
+         data.total_price is number && data.total_price >= 0 &&
+         data.status in ['Confirmed', 'Cancelled', 'Completed'];
+}
+
+function isValidRoomBooking(data) {
+  return data.room_id is string &&
+         data.room_number is string &&
+         data.guest_name is string && data.guest_name.size() > 0 &&
+         isValidDateTime(data.check_in) &&
+         isValidDateTime(data.check_out) &&
+         data.status in ['Confirmed', 'Checked In', 'Checked Out', 'Cancelled'] &&
+         data.total_price is number && data.total_price >= 0 &&
+         isValidDateTime(data.created_at);
+}
+
+function isValidNotification(data) {
+  return data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+         data.message is string && data.message.size() > 0 && data.message.size() < 1000 &&
+         data.type in ['order', 'laundry', 'conference', 'system'] &&
+         data.read is bool &&
+         isValidDateTime(data.created_at);
+}
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields:
-    //   - username: string (required)
-    //   - name: string (required)
-    //   - role: string (required, enum: Admin, Receptionist, Waiter, Barman, Laundry)
-    //   - email: string (optional, format: email)
-    //   - password: string (optional, min 6 chars)
-    //
-    // Collection: rooms
-    // Fields:
-    //   - number: string (required)
-    //   - category: string (required)
-    //   - price: number (required, positive)
-    //   - status: string (required, enum: Available, Occupied, Cleaning, Maintenance)
-    //
-    // Collection: menu_items
-    // Fields:
-    //   - name: string (required)
-    //   - price: number (required, positive)
-    //   - category: string (required)
-    //   - type: string (required, enum: Restaurant, Bar)
-    //   - status: string (required, enum: Available, Out of Stock)
-    //
-    // Collection: orders
-    // Fields:
-    //   - table_number: string (required)
-    //   - items: list (required, max 50 items)
-    //   - total_price: number (required, positive)
-    //   - status: string (required, enum: Pending, Accepted, Preparing, Serving, Completed, Cancelled, Paid)
-    //   - type: string (required, enum: Restaurant, Bar)
-    //   - created_at: string (required, format: date-time)
-    //
-    // Collection: laundry_orders
-    // Fields:
-    //   - room_number: string (required)
-    //   - items: list (required, max 50 items)
-    //   - total_price: number (required, positive)
-    //   - status: string (required, enum: Pending, In Progress, Ready, Delivered)
-    //   - created_at: string (required, format: date-time)
-    //
-    // Collection: laundry_services
-    // Fields:
-    //   - name: string (required)
-    //   - price: number (required, positive)
-    //
-    // Collection: conference_rooms
-    // Fields:
-    //   - name: string (required)
-    //   - capacity: number (required, positive)
-    //   - price_per_hour: number (required, positive)
-    //   - status: string (required, enum: Available, Booked, Maintenance)
-    //
-    // Collection: conference_bookings
-    // Fields:
-    //   - room_id: string (required)
-    //   - client_name: string (required)
-    //   - start_time: string (required, format: date-time)
-    //   - end_time: string (required, format: date-time)
-    //   - services: list (required, max 20 items)
-    //   - total_price: number (required, positive)
-    //   - status: string (required, enum: Confirmed, Cancelled, Completed)
-    //
-    // Collection: conference_services
-    // Fields:
-    //   - name: string (required)
-    //   - price: number (required, positive)
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    function isAuthenticated() {
-      return request.auth != null && request.auth.token.email != null;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email == "btutu427@gmail.com" && request.auth.token.email_verified == true) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Admin')
-      );
-    }
-
-    function isWaiter() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Waiter';
-    }
-
-    function isBarman() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Barman';
-    }
-
-    function isReceptionist() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Receptionist';
-    }
-
-    function isLaundryStaff() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Laundry';
-    }
-
-    function isStaff() {
-      return isAuthenticated() && (
-        isAdmin() || isWaiter() || isBarman() || isReceptionist() || isLaundryStaff()
-      );
-    }
-
-    function isCustomer() {
-      return isAuthenticated() && 
-        userExists(request.auth.token.email) && 
-        getUserData(request.auth.token.email).role == 'Customer';
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidDateTime(dateTime) {
-      return dateTime is string && dateTime.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-    function isValidUser(data) {
-      return hasOnlyAllowedFields(['username', 'role', 'name', 'email', 'password']) &&
-        data.username is string && data.username.size() > 0 && data.username.size() < 100 &&
-        data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry', 'Customer'] &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        (!('email' in data) || isValidEmail(data.email)) &&
-        (!('password' in data) || (data.password is string && data.password.size() >= 6));
-    }
-
-    function isValidRoom(data) {
-      return hasOnlyAllowedFields(['number', 'category', 'price', 'status', 'imageUrl']) &&
-        data.number is string && data.number.size() > 0 && data.number.size() < 20 &&
-        data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
-        data.price is number && data.price >= 0 &&
-        data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance'] &&
-        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 500));
-    }
-
-    function isValidMenuItem(data) {
-      return hasOnlyAllowedFields(['name', 'price', 'category', 'type', 'status', 'imageUrl', 'stock', 'costPrice', 'minStock']) &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        data.price is number && data.price >= 0 &&
-        data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
-        data.type in ['Restaurant', 'Bar'] &&
-        data.status in ['Available', 'Out of Stock'] &&
-        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 500)) &&
-        (!('stock' in data) || data.stock is number) &&
-        (!('costPrice' in data) || data.costPrice is number) &&
-        (!('minStock' in data) || data.minStock is number);
-    }
-
-    function isValidOrder(data) {
-      return hasOnlyAllowedFields(['table_number', 'items', 'total_price', 'status', 'type', 'created_at']) &&
-        data.table_number is string && data.table_number.size() > 0 &&
-        data.items is list && data.items.size() <= 50 &&
-        data.total_price is number && data.total_price >= 0 &&
-        data.status in ['Pending', 'Accepted', 'Preparing', 'Serving', 'Completed', 'Cancelled', 'Paid'] &&
-        data.type in ['Restaurant', 'Bar'] &&
-        isValidDateTime(data.created_at);
-    }
-
-    function isValidLaundryOrder(data) {
-      return hasOnlyAllowedFields(['room_number', 'items', 'total_price', 'status', 'created_at']) &&
-        data.room_number is string && data.room_number.size() > 0 &&
-        data.items is list && data.items.size() <= 50 &&
-        data.total_price is number && data.total_price >= 0 &&
-        data.status in ['Pending', 'In Progress', 'Ready', 'Delivered'] &&
-        isValidDateTime(data.created_at);
-    }
-
-    function isValidLaundryService(data) {
-      return hasOnlyAllowedFields(['name', 'price']) &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        data.price is number && data.price >= 0;
-    }
-
-    function isValidConferenceRoom(data) {
-      return hasOnlyAllowedFields(['name', 'capacity', 'price_per_hour', 'status']) &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        data.capacity is number && data.capacity > 0 &&
-        data.price_per_hour is number && data.price_per_hour >= 0 &&
-        data.status in ['Available', 'Booked', 'Maintenance'];
-    }
-
-    function isValidConferenceBooking(data) {
-      return hasOnlyAllowedFields(['room_id', 'room_name', 'client_name', 'start_time', 'end_time', 'services', 'total_price', 'status']) &&
-        data.room_id is string &&
-        data.client_name is string && data.client_name.size() > 0 && data.client_name.size() < 100 &&
-        isValidDateTime(data.start_time) &&
-        isValidDateTime(data.end_time) &&
-        data.services is list && data.services.size() <= 20 &&
-        data.total_price is number && data.total_price >= 0 &&
-        data.status in ['Confirmed', 'Cancelled', 'Completed'];
-    }
-
-    function isValidConferenceService(data) {
-      return hasOnlyAllowedFields(['name', 'price']) &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        data.price is number && data.price >= 0;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
+    
     match /users/{userId} {
-      // Temporarily simplify rules to diagnose permission error
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
-      allow update: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
+      allow read: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.token.email == userId || isAdmin()) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.token.email == userId || isAdmin()) && isValidUser(request.resource.data);
       allow delete: if isAdmin();
     }
 
@@ -240,24 +145,20 @@ service cloud.firestore {
 
     match /menu_items/{itemId} {
       allow read: if isAuthenticated();
-      allow create: if isAdmin() || 
-        (isWaiter() && request.resource.data.type == 'Restaurant') || 
-        (isBarman() && request.resource.data.type == 'Bar');
-      allow update, delete: if isAdmin() || 
-        (isWaiter() && resource.data.type == 'Restaurant') || 
-        (isBarman() && resource.data.type == 'Bar');
+      allow create: if isAdmin() || (isWaiter() && request.resource.data.type == 'Restaurant') || (isBarman() && request.resource.data.type == 'Bar');
+      allow update, delete: if isAdmin() || (isWaiter() && resource.data.type == 'Restaurant') || (isBarman() && resource.data.type == 'Bar');
     }
 
     match /orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if (isStaff() || isCustomer()) && isValidOrder(request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.customer_email == request.auth.token.email || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.customer_email == request.auth.token.email || isStaff()) && isValidOrder(request.resource.data);
       allow update: if isStaff() && isValidOrder(request.resource.data);
       allow delete: if isAdmin();
     }
 
     match /laundry_orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if (isStaff() || isCustomer()) && isValidLaundryOrder(request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.customer_email == request.auth.token.email || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.customer_email == request.auth.token.email || isStaff()) && isValidLaundryOrder(request.resource.data);
       allow update: if isStaff() && isValidLaundryOrder(request.resource.data);
       allow delete: if isAdmin();
     }
@@ -273,8 +174,9 @@ service cloud.firestore {
     }
 
     match /conference_bookings/{bookingId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAdmin() || isReceptionist();
+      allow read: if isAuthenticated() && (resource.data.client_email == request.auth.token.email || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.client_email == request.auth.token.email || isStaff()) && isValidConferenceBooking(request.resource.data);
+      allow update: if isStaff() && isValidConferenceBooking(request.resource.data);
       allow delete: if isAdmin();
     }
 
@@ -284,8 +186,38 @@ service cloud.firestore {
     }
 
     match /room_bookings/{bookingId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isStaff();
+      allow read: if isAuthenticated() && (resource.data.guest_email == request.auth.token.email || isStaff());
+      allow create: if isStaff() && isValidRoomBooking(request.resource.data);
+      allow update: if isStaff() && isValidRoomBooking(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (
+        request.auth.token.email == resource.data.userId || 
+        (resource.data.role != null && (
+          (resource.data.role == 'Waiter' && isWaiter()) ||
+          (resource.data.role == 'Barman' && isBarman()) ||
+          (resource.data.role == 'Receptionist' && isReceptionist()) ||
+          (resource.data.role == 'Laundry' && isLaundryStaff()) ||
+          (resource.data.role == 'Customer' && isCustomer()) ||
+          (resource.data.role == 'Admin' && isAdmin())
+        )) ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && (
+        request.auth.token.email == resource.data.userId || 
+        (resource.data.role != null && (
+          (resource.data.role == 'Waiter' && isWaiter()) ||
+          (resource.data.role == 'Barman' && isBarman()) ||
+          (resource.data.role == 'Receptionist' && isReceptionist()) ||
+          (resource.data.role == 'Laundry' && isLaundryStaff()) ||
+          (resource.data.role == 'Customer' && isCustomer()) ||
+          (resource.data.role == 'Admin' && isAdmin())
+        )) ||
+        isAdmin()
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isAdmin();
     }
 

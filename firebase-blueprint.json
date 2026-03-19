@@ -125,6 +125,22 @@
         "price": { "type": "number" }
       },
       "required": ["name", "price"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for a user or role.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The email of the user this notification is for." },
+        "role": { "type": "string", "description": "The role this notification is for (e.g., 'Waiter')." },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["order", "laundry", "conference", "system"] },
+        "read": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "orderId": { "type": "string" }
+      },
+      "required": ["title", "message", "type", "read", "created_at"]
     }
   },
   "firestore": {
@@ -137,6 +153,7 @@
     "room_bookings": { "schema": "RoomBooking", "description": "Guest check-ins" },
     "conference_rooms": { "schema": "ConferenceRoom", "description": "Conference rooms" },
     "conference_bookings": { "schema": "ConferenceBooking", "description": "Conference bookings" },
-    "conference_services": { "schema": "ConferenceService", "description": "Available conference services" }
+    "conference_services": { "schema": "ConferenceService", "description": "Available conference services" },
+    "notifications": { "schema": "Notification", "description": "System and user notifications" }
   }
 }

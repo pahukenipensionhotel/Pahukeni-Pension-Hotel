@@ -25,8 +25,9 @@ import {
   Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Stats, Room, MenuItem, Order, LaundryOrder, User, ConferenceRoom, ConferenceService, LaundryService } from './types';
+import { Stats, Room, MenuItem, Order, LaundryOrder, User, ConferenceRoom, ConferenceService, LaundryService, Notification } from './types';
 import { auth, db } from './firebase';
+import { NotificationService } from './services/notificationService';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -162,6 +163,58 @@ class ErrorBoundary extends React.Component<any, any> {
 }
 
 // --- Components ---
+
+const NotificationCenter = ({ notifications, onClose, onMarkAsRead }: { 
+  notifications: Notification[], 
+  onClose: () => void,
+  onMarkAsRead: (id: string) => void 
+}) => {
+  return (
+    <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-black/5 z-[100] overflow-hidden">
+      <div className="p-4 border-bottom border-black/5 flex items-center justify-between bg-gray-50">
+        <h3 className="text-sm font-serif italic">Notifications</h3>
+        <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-full transition-colors">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="max-h-96 overflow-y-auto">
+        {notifications.length === 0 ? (
+          <div className="p-8 text-center text-black/20 font-mono text-xs">
+            No notifications
+          </div>
+        ) : (
+          notifications.map((notif) => (
+            <div 
+              key={notif.id} 
+              className={`p-4 border-bottom border-black/5 last:border-0 transition-colors cursor-pointer hover:bg-gray-50 ${!notif.read ? 'bg-blue-50/30' : ''}`}
+              onClick={() => onMarkAsRead(notif.id)}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${
+                  notif.type === 'order' ? 'bg-blue-100 text-blue-600' :
+                  notif.type === 'laundry' ? 'bg-emerald-100 text-emerald-600' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  <Bell size={14} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium mb-1">{notif.title}</p>
+                  <p className="text-[10px] text-black/60 leading-relaxed mb-2">{notif.message}</p>
+                  <p className="text-[8px] font-mono text-black/30 uppercase">
+                    {new Date(notif.created_at).toLocaleString()}
+                  </p>
+                </div>
+                {!notif.read && (
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mt-1"></div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -596,7 +649,7 @@ const InventoryModule = ({ menu, isAdmin, userRole }: { menu: MenuItem[], isAdmi
   );
 };
 
-const POSModule = ({ type, menu, orders, isAdmin, userRole }: { type: 'Restaurant' | 'Bar', menu: MenuItem[], orders: Order[], isAdmin: boolean, userRole?: string }) => {
+const POSModule = ({ type, menu, orders, isAdmin, userRole, user, createNotification }: { type: 'Restaurant' | 'Bar', menu: MenuItem[], orders: Order[], isAdmin: boolean, userRole?: string, user: User, createNotification: (notif: any) => Promise<void> }) => {
   const [cart, setCart] = useState<{ item: any, qty: number }[]>([]);
   const [table, setTable] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -640,6 +693,23 @@ const POSModule = ({ type, menu, orders, isAdmin, userRole }: { type: 'Restauran
         type,
         created_at: new Date().toISOString()
       });
+
+      // Notify relevant staff
+      if (type === 'Bar') {
+        await createNotification({
+          role: 'Barman',
+          title: 'New Bar Order',
+          message: `New order for Table ${table} placed by ${userRole || 'Guest'}`,
+          type: 'order'
+        });
+      } else if (type === 'Restaurant') {
+        await createNotification({
+          role: 'Waiter',
+          title: 'New Restaurant Order',
+          message: `New order for Table ${table} placed by ${userRole || 'Reception'}`,
+          type: 'order'
+        });
+      }
 
       // Deduct stock for Bar items
       if (type === 'Bar') {
@@ -712,6 +782,18 @@ const POSModule = ({ type, menu, orders, isAdmin, userRole }: { type: 'Restauran
       const updateData: any = { status: newStatus };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, 'orders', orderId), updateData);
+
+      // Create notification for the customer if the order has an email
+      const order = orders.find(o => o.id === orderId);
+      if (order && order.customer_email) {
+        await createNotification({
+          userId: order.customer_email, // Using email as userId for customers
+          title: 'Order Update',
+          message: `Your ${type} order status is now: ${newStatus}${estimatedArrival ? `. Est. arrival: ${estimatedArrival}` : ''}`,
+          type: 'order',
+          orderId: orderId
+        });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'orders');
     }
@@ -1346,7 +1428,7 @@ const RoomsModule = ({ rooms, isAdmin, userRole }: { rooms: Room[], isAdmin: boo
   );
 };
 
-const LaundryModule = ({ orders, services, isAdmin, userRole }: { orders: LaundryOrder[], services: any[], isAdmin: boolean, userRole?: string }) => {
+const LaundryModule = ({ orders, services, isAdmin, userRole, user, createNotification }: { orders: LaundryOrder[], services: any[], isAdmin: boolean, userRole?: string, user: User, createNotification: (notif: any) => Promise<void> }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'orders' | 'services'>('orders');
@@ -1378,6 +1460,14 @@ const LaundryModule = ({ orders, services, isAdmin, userRole }: { orders: Laundr
         status: 'Received',
         items: cart.map(c => ({ name: c.item.name, price: c.item.price, qty: c.qty })),
         created_at: new Date().toISOString()
+      });
+
+      // Notify staff
+      await createNotification({
+        role: 'Receptionist',
+        title: 'New Laundry Order',
+        message: `New laundry order for ${newOrder.guest_name} (Room ${newOrder.room_number})`,
+        type: 'laundry'
       });
       setIsAdding(false);
       setCart([]);
@@ -1426,6 +1516,18 @@ const LaundryModule = ({ orders, services, isAdmin, userRole }: { orders: Laundr
       const updateData: any = { status };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, 'laundry_orders', id), updateData);
+
+      // Create notification for the guest
+      const order = orders.find(o => o.id === id);
+      if (order && order.customer_email) {
+        await createNotification({
+          userId: order.customer_email,
+          title: 'Laundry Update',
+          message: `Your laundry order is now: ${status}${estimatedArrival ? `. Est. delivery: ${estimatedArrival}` : ''}`,
+          type: 'laundry',
+          orderId: id
+        });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'laundry_orders');
     }
@@ -1769,7 +1871,7 @@ const LaundryModule = ({ orders, services, isAdmin, userRole }: { orders: Laundr
   );
 };
 
-const ConferenceModule = ({ rooms, services, bookings, isAdmin, userRole }: { rooms: any[], services: any[], bookings: any[], isAdmin: boolean, userRole?: string }) => {
+const ConferenceModule = ({ rooms, services, bookings, isAdmin, userRole, user, createNotification }: { rooms: any[], services: any[], bookings: any[], isAdmin: boolean, userRole?: string, user: User, createNotification: (notif: any) => Promise<void> }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
@@ -1830,11 +1932,20 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin, userRole }: { ro
         room_id: selectedFacility.id,
         room_name: selectedFacility.name,
         client_name: newBooking.client_name,
+        client_email: user?.email || '',
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         services: newBooking.selectedServices,
         total_price: totalPrice,
         status: 'Confirmed'
+      });
+
+      // Notify staff
+      await createNotification({
+        role: 'Receptionist',
+        title: 'New Conference Booking',
+        message: `New booking for ${selectedFacility.name} by ${newBooking.client_name}`,
+        type: 'conference'
       });
 
       setIsBooking(false);
@@ -2414,61 +2525,52 @@ const StaffModule = ({ users }: { users: User[] }) => {
   );
 };
 
-const CustomerPortal = ({ user }: { user: User }) => {
+const CustomerPortal = ({ 
+  user, 
+  notifications: globalNotifications, 
+  markNotificationAsRead, 
+  createNotification,
+  rooms,
+  menu,
+  laundryServices,
+  conferenceRooms,
+  conferenceServices,
+  myOrders,
+  myLaundryOrders,
+  myRoomBookings,
+  myConferenceBookings
+}: { 
+  user: User, 
+  notifications: Notification[], 
+  markNotificationAsRead: (id: string) => Promise<void>, 
+  createNotification: (notif: any) => Promise<void>,
+  rooms: Room[],
+  menu: MenuItem[],
+  laundryServices: LaundryService[],
+  conferenceRooms: ConferenceRoom[],
+  conferenceServices: ConferenceService[],
+  myOrders: Order[],
+  myLaundryOrders: LaundryOrder[],
+  myRoomBookings: any[],
+  myConferenceBookings: any[]
+}) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [laundryServices, setLaundryServices] = useState<LaundryService[]>([]);
-  const [conferenceRooms, setConferenceRooms] = useState<ConferenceRoom[]>([]);
-  const [conferenceServices, setConferenceServices] = useState<ConferenceService[]>([]);
-  const [myOrders, setMyOrders] = useState<Order[]>([]);
-  const [myLaundryOrders, setMyLaundryOrders] = useState<LaundryOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toasts, setToasts] = useState<{ id: string, message: string, type: 'info' | 'success' | 'error' }[]>([]);
 
-  useEffect(() => {
-    const unsubRooms = onSnapshot(collection(db, 'rooms'), (snap) => {
-      setRooms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room)));
-    });
-    const unsubMenu = onSnapshot(collection(db, 'menu_items'), (snap) => {
-      setMenu(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem)));
-    });
-    const unsubLaundry = onSnapshot(collection(db, 'laundry_services'), (snap) => {
-      setLaundryServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryService)));
-    });
-    const unsubConf = onSnapshot(collection(db, 'conference_rooms'), (snap) => {
-      setConferenceRooms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConferenceRoom)));
-    });
-    const unsubConfServ = onSnapshot(collection(db, 'conference_services'), (snap) => {
-      setConferenceServices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConferenceService)));
-    });
-
-    // Listen to orders placed by this customer
-    const qOrders = query(collection(db, 'orders'), where('customer_email', '==', user.email));
-    const unsubOrders = onSnapshot(qOrders, (snap) => {
-      setMyOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
-    });
-
-    const qLaundryOrders = query(collection(db, 'laundry_orders'), where('customer_email', '==', user.email));
-    const unsubLaundryOrders = onSnapshot(qLaundryOrders, (snap) => {
-      setMyLaundryOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryOrder)));
-    });
-
-    setLoading(false);
-    return () => {
-      unsubRooms();
-      unsubMenu();
-      unsubLaundry();
-      unsubConf();
-      unsubConfServ();
-      unsubOrders();
-      unsubLaundryOrders();
-    };
-  }, [user.email]);
+  const addToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  };
 
   const placeOrder = async (item: MenuItem) => {
     try {
-      await addDoc(collection(db, 'orders'), {
+      const orderRef = await addDoc(collection(db, 'orders'), {
         customer_email: user.email,
         customer_name: user.name,
         items: [{ ...item, quantity: 1 }],
@@ -2477,16 +2579,26 @@ const CustomerPortal = ({ user }: { user: User }) => {
         type: item.type,
         created_at: new Date().toISOString()
       });
-      alert('Order placed successfully!');
+
+      // Notify staff
+      await createNotification({
+        role: item.type === 'Restaurant' ? 'Waiter' : 'Barman',
+        title: `New ${item.type} Order`,
+        message: `New order from ${user.name} for ${item.name}`,
+        type: 'order',
+        orderId: orderRef.id
+      });
+
+      addToast('Order placed successfully!', 'success');
     } catch (err) {
       console.error(err);
-      alert('Failed to place order');
+      addToast('Failed to place order', 'error');
     }
   };
 
   const placeLaundryOrder = async (service: LaundryService) => {
     try {
-      await addDoc(collection(db, 'laundry_orders'), {
+      const orderRef = await addDoc(collection(db, 'laundry_orders'), {
         customer_email: user.email,
         guest_name: user.name,
         items: [{ ...service, quantity: 1 }],
@@ -2494,15 +2606,29 @@ const CustomerPortal = ({ user }: { user: User }) => {
         status: 'Received',
         created_at: new Date().toISOString()
       });
-      alert('Laundry request sent!');
+
+      // Notify staff
+      await createNotification({
+        role: 'Receptionist',
+        title: 'New Laundry Request',
+        message: `New laundry request from ${user.name}`,
+        type: 'laundry',
+        orderId: orderRef.id
+      });
+
+      addToast('Laundry request sent!', 'success');
     } catch (err) {
       console.error(err);
-      alert('Failed to send request');
+      addToast('Failed to send request', 'error');
     }
   };
 
-  const [notifications, setNotifications] = useState<{ id: string, message: string, type: 'info' | 'success' }[]>([]);
   const lastStatuses = useRef<{ [key: string]: string }>({});
+  const isInitialLoad = useRef(true);
+
+  useEffect(() => {
+    NotificationService.requestPermission();
+  }, []);
 
   useEffect(() => {
     const allOrders = [...myOrders, ...myLaundryOrders];
@@ -2513,15 +2639,22 @@ const CustomerPortal = ({ user }: { user: User }) => {
         const message = `${type} status updated to: ${order.status}`;
         const id = Math.random().toString(36).substr(2, 9);
         
-        setNotifications(prev => [...prev, { id, message, type: 'success' }]);
+        setToasts(prev => [...prev, { id, message, type: 'success' }]);
+        
+        // Push Notification
+        NotificationService.notify('Order Update', {
+          body: message,
+          tag: order.id
+        });
         
         // Auto-remove notification after 5 seconds
         setTimeout(() => {
-          setNotifications(prev => prev.filter(n => n.id !== id));
+          setToasts(prev => prev.filter(n => n.id !== id));
         }, 5000);
       }
       lastStatuses.current[order.id] = order.status;
     });
+    isInitialLoad.current = false;
   }, [myOrders, myLaundryOrders]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-mono">Loading Portal...</div>;
@@ -2531,7 +2664,7 @@ const CustomerPortal = ({ user }: { user: User }) => {
       {/* Notifications Overlay */}
       <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
         <AnimatePresence>
-          {notifications.map(n => (
+          {toasts.map(n => (
             <motion.div
               key={n.id}
               initial={{ opacity: 0, x: 50, scale: 0.9 }}
@@ -2544,7 +2677,7 @@ const CustomerPortal = ({ user }: { user: User }) => {
               </div>
               <p className="text-sm font-medium">{n.message}</p>
               <button 
-                onClick={() => setNotifications(prev => prev.filter(notif => notif.id !== n.id))}
+                onClick={() => setToasts(prev => prev.filter(notif => notif.id !== n.id))}
                 className="ml-auto p-1 hover:bg-white/10 rounded-lg"
               >
                 <X size={14} />
@@ -2571,6 +2704,29 @@ const CustomerPortal = ({ user }: { user: User }) => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
+              >
+                <Bell size={20} className="text-black/60" />
+                {globalNotifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 z-50">
+                    <NotificationCenter 
+                      notifications={globalNotifications} 
+                      onClose={() => setShowNotifications(false)} 
+                      onMarkAsRead={markNotificationAsRead} 
+                    />
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
             <span className="text-xs font-mono text-black/60 hidden sm:block">{user.name}</span>
             <button 
               onClick={() => signOut(auth)}
@@ -2973,16 +3129,25 @@ export default function App() {
   const [laundryServices, setLaundryServices] = useState<any[]>([]);
   const [conferenceServices, setConferenceServices] = useState<any[]>([]);
   const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const lastOrdersCount = useRef<number | null>(null);
+  const lastLaundryCount = useRef<number | null>(null);
+  const lastBookingCount = useRef<number | null>(null);
+
+  useEffect(() => {
+    NotificationService.requestPermission();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // Developer bypass for initial setup
-        if (firebaseUser.email === 'btutu427@gmail.com') {
+        if (['btutu427@gmail.com', 'pahukenipensionhotelcc@gmail.com'].includes(firebaseUser.email)) {
           setUser({ 
             id: firebaseUser.uid, 
             username: 'developer', 
-            name: 'System Developer', 
+            name: firebaseUser.email === 'btutu427@gmail.com' ? 'System Developer' : 'Hotel Admin', 
             role: 'Admin',
             email: firebaseUser.email 
           });
@@ -3029,6 +3194,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const isStaff = user?.role && ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry'].includes(user.role);
+
   // Real-time listeners
   useEffect(() => {
     if (!user) return;
@@ -3041,15 +3208,62 @@ export default function App() {
       setMenu(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem)));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'menu_items'));
 
-    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+    // Role-aware queries for orders
+    const ordersQuery = isStaff 
+      ? collection(db, 'orders')
+      : query(collection(db, 'orders'), where('customer_email', '==', user.email));
+
+    const unsubOrders = onSnapshot(ordersQuery, (snapshot) => {
+      const newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setOrders(newOrders);
+      
+      // Notify staff of new incoming orders
+      if (lastOrdersCount.current !== null && newOrders.length > lastOrdersCount.current) {
+        const latest = newOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        if (latest && latest.status === 'Pending') {
+          const isRelevant = 
+            user.role === 'Admin' || 
+            (latest.type === 'Restaurant' && user.role === 'Waiter') || 
+            (latest.type === 'Bar' && user.role === 'Barman');
+
+          if (isRelevant) {
+            NotificationService.notify(`New ${latest.type} Order`, {
+              body: `Table ${latest.table_number || 'N/A'} placed a new order.`,
+              tag: 'new-order'
+            });
+          }
+        }
+      }
+      lastOrdersCount.current = newOrders.length;
     }, (error) => handleFirestoreError(error, OperationType.GET, 'orders'));
 
-    const unsubLaundry = onSnapshot(collection(db, 'laundry_orders'), (snapshot) => {
-      setLaundry(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryOrder)));
+    // Role-aware queries for laundry
+    const laundryQuery = isStaff
+      ? collection(db, 'laundry_orders')
+      : query(collection(db, 'laundry_orders'), where('customer_email', '==', user.email));
+
+    const unsubLaundry = onSnapshot(laundryQuery, (snapshot) => {
+      const newLaundry = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryOrder));
+      setLaundry(newLaundry);
+
+      if (lastLaundryCount.current !== null && newLaundry.length > lastLaundryCount.current) {
+        const isRelevant = user.role === 'Admin' || user.role === 'Receptionist';
+        if (isRelevant) {
+          NotificationService.notify('New Laundry Request', {
+            body: 'A new laundry service request has been received.',
+            tag: 'new-laundry'
+          });
+        }
+      }
+      lastLaundryCount.current = newLaundry.length;
     }, (error) => handleFirestoreError(error, OperationType.GET, 'laundry_orders'));
 
-    const unsubBookings = onSnapshot(collection(db, 'room_bookings'), (snapshot) => {
+    // Role-aware queries for room bookings
+    const bookingsQuery = isStaff
+      ? collection(db, 'room_bookings')
+      : query(collection(db, 'room_bookings'), where('guest_email', '==', user.email));
+
+    const unsubBookings = onSnapshot(bookingsQuery, (snapshot) => {
       setBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'room_bookings'));
 
@@ -3072,9 +3286,81 @@ export default function App() {
       setConferenceServices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'conference_services'));
 
-    const unsubConfBookings = onSnapshot(collection(db, 'conference_bookings'), (snapshot) => {
-      setConferenceBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    // Role-aware queries for conference bookings
+    const confBookingsQuery = isStaff
+      ? collection(db, 'conference_bookings')
+      : query(collection(db, 'conference_bookings'), where('client_email', '==', user.email));
+
+    const unsubConfBookings = onSnapshot(confBookingsQuery, (snapshot) => {
+      const newBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setConferenceBookings(newBookings);
+
+      if (lastBookingCount.current !== null && newBookings.length > lastBookingCount.current) {
+        const isRelevant = user.role === 'Admin' || user.role === 'Receptionist';
+        if (isRelevant) {
+          NotificationService.notify('New Conference Booking', {
+            body: 'A new conference room booking request has been received.',
+            tag: 'new-conference'
+          });
+        }
+      }
+      lastBookingCount.current = newBookings.length;
     }, (error) => handleFirestoreError(error, OperationType.GET, 'conference_bookings'));
+
+    // Listen to persistent notifications
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.email || ''),
+      orderBy('created_at', 'desc')
+    );
+    const unsubNotifs = onSnapshot(q, (snapshot) => {
+      const personalNotifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      setNotifications(prev => {
+        const combined = [...prev, ...personalNotifs];
+        // Deduplicate by ID and sort
+        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+        
+        // Trigger browser notification for new unread ones
+        personalNotifs.filter(n => !n.read).forEach(n => {
+          const age = Date.now() - new Date(n.created_at).getTime();
+          if (age < 10000) {
+            NotificationService.notify(n.title, { body: n.message, tag: n.id });
+          }
+        });
+
+        return unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      });
+    }, (error) => {
+      // If query fails (e.g. index missing), fallback to non-filtered or just log
+      console.warn('Notification listener failed:', error);
+    });
+
+    // Also listen to role-based notifications
+    const qRole = query(
+      collection(db, 'notifications'),
+      where('role', '==', user.role),
+      orderBy('created_at', 'desc')
+    );
+    const unsubRoleNotifs = onSnapshot(qRole, (snapshot) => {
+      const roleNotifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      setNotifications(prev => {
+        const combined = [...prev, ...roleNotifs];
+        // Deduplicate by ID and sort
+        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+        
+        // Trigger browser notification for new unread ones
+        roleNotifs.filter(n => !n.read).forEach(n => {
+          const age = Date.now() - new Date(n.created_at).getTime();
+          if (age < 10000) {
+            NotificationService.notify(n.title, { body: n.message, tag: n.id });
+          }
+        });
+
+        return unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      });
+    }, (error) => {
+      console.warn('Role notification listener failed:', error);
+    });
 
     return () => {
       unsubRooms();
@@ -3087,8 +3373,41 @@ export default function App() {
       unsubLaundryServices();
       unsubConfServices();
       unsubConfBookings();
+      unsubNotifs();
+      unsubRoleNotifs();
     };
   }, [user]);
+
+  const createNotification = async (notif: Omit<Notification, 'id' | 'read' | 'created_at'>) => {
+    try {
+      // Create for the intended role/user
+      await addDoc(collection(db, 'notifications'), {
+        ...notif,
+        read: false,
+        created_at: new Date().toISOString()
+      });
+      
+      // Also create for Admin if it's a role-based notification and not already for Admin
+      if (notif.role && notif.role !== 'Admin') {
+        await addDoc(collection(db, 'notifications'), {
+          ...notif,
+          role: 'Admin',
+          read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create notification:', err);
+    }
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', id), { read: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'notifications');
+    }
+  };
 
   const stats = useMemo(() => {
     return {
@@ -3171,7 +3490,23 @@ export default function App() {
   if (!user) return <LoginPage />;
 
   if (user.role === 'Customer') {
-    return <CustomerPortal user={user} />;
+    return (
+      <CustomerPortal 
+        user={user} 
+        notifications={notifications} 
+        markNotificationAsRead={markNotificationAsRead}
+        createNotification={createNotification}
+        rooms={rooms}
+        menu={menu}
+        laundryServices={laundryServices}
+        conferenceRooms={conferenceRooms}
+        conferenceServices={conferenceServices}
+        myOrders={orders}
+        myLaundryOrders={laundry}
+        myRoomBookings={bookings}
+        myConferenceBookings={conferenceBookings}
+      />
+    );
   }
 
   const menuItems = [
@@ -3283,7 +3618,29 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-4">
-              {/* Action buttons removed as per request */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="p-2 hover:bg-black/5 rounded-xl transition-colors relative"
+                >
+                  <Bell size={20} className="text-[#141414]" />
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#E4E3E0]"></span>
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showNotifications && (
+                    <div className="absolute right-0 mt-2 w-80 z-50">
+                      <NotificationCenter 
+                        notifications={notifications} 
+                        onClose={() => setShowNotifications(false)} 
+                        onMarkAsRead={markNotificationAsRead} 
+                      />
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </header>
 
@@ -3320,10 +3677,31 @@ export default function App() {
                 orders={orders}
                 isAdmin={user?.role === 'Admin'} 
                 userRole={user?.role}
+                user={user!}
+                createNotification={createNotification}
               />
             )}
-            {activeTab === 'laundry' && <LaundryModule orders={laundry} services={laundryServices} isAdmin={user?.role === 'Admin'} userRole={user?.role} />}
-            {activeTab === 'conference' && <ConferenceModule rooms={conferenceRooms} services={conferenceServices} bookings={conferenceBookings} isAdmin={user?.role === 'Admin'} userRole={user?.role} />}
+            {activeTab === 'laundry' && (
+              <LaundryModule 
+                orders={laundry} 
+                services={laundryServices} 
+                isAdmin={user?.role === 'Admin'} 
+                userRole={user?.role} 
+                user={user!}
+                createNotification={createNotification}
+              />
+            )}
+            {activeTab === 'conference' && (
+              <ConferenceModule 
+                rooms={conferenceRooms} 
+                services={conferenceServices} 
+                bookings={conferenceBookings} 
+                isAdmin={user?.role === 'Admin'} 
+                userRole={user?.role} 
+                user={user!}
+                createNotification={createNotification}
+              />
+            )}
             {activeTab !== 'dashboard' && activeTab !== 'restaurant' && activeTab !== 'bar' && activeTab !== 'staff' && activeTab !== 'laundry' && activeTab !== 'conference' && activeTab !== 'rooms' && (
               <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
                 <AlertCircle size={48} className="text-black/10 mb-4" />
