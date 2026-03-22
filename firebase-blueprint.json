@@ -54,6 +54,7 @@
         "table_number": { "type": "string" },
         "customer_name": { "type": "string" },
         "customer_email": { "type": "string" },
+        "customer_uid": { "type": "string", "description": "UID of the customer" },
         "items": { "type": "array" },
         "total_price": { "type": "number" },
         "status": { "type": "string", "enum": ["Pending", "Accepted", "Preparing", "Serving", "Completed", "Cancelled", "Paid"] },
@@ -71,6 +72,7 @@
         "guest_name": { "type": "string" },
         "room_number": { "type": "string" },
         "customer_email": { "type": "string" },
+        "customer_uid": { "type": "string", "description": "UID of the customer" },
         "items": { "type": "array" },
         "total_price": { "type": "number" },
         "status": { "type": "string", "enum": ["Pending", "In Progress", "Ready", "Delivered"] },
@@ -98,6 +100,8 @@
       "properties": {
         "room_id": { "type": "string" },
         "client_name": { "type": "string" },
+        "client_email": { "type": "string" },
+        "client_uid": { "type": "string", "description": "UID of the client" },
         "start_time": { "type": "string", "format": "date-time" },
         "end_time": { "type": "string", "format": "date-time" },
         "services": { "type": "array" },
@@ -126,12 +130,27 @@
       },
       "required": ["name", "price"]
     },
+    "RoomBooking": {
+      "title": "RoomBooking",
+      "description": "Booking for a hotel room",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "guest_name": { "type": "string" },
+        "guest_email": { "type": "string" },
+        "guest_uid": { "type": "string" },
+        "check_in": { "type": "string", "format": "date-time" },
+        "check_out": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Active", "Completed", "Cancelled"] }
+      },
+      "required": ["room_id", "guest_name", "check_in", "check_out", "status"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "A notification for a user or role.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "description": "The email of the user this notification is for." },
+        "userId": { "type": "string", "description": "The UID of the user this notification is for." },
         "role": { "type": "string", "description": "The role this notification is for (e.g., 'Waiter')." },
         "title": { "type": "string" },
         "message": { "type": "string" },

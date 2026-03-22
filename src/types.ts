@@ -13,6 +13,8 @@ export interface Room {
   price: number;
   status: 'Available' | 'Occupied' | 'Cleaning' | 'Maintenance';
   imageUrl?: string;
+  description?: string;
+  amenities?: string[];
 }
 
 export interface MenuItem {
@@ -33,6 +35,7 @@ export interface Order {
   table_number?: string;
   customer_name?: string;
   customer_email?: string;
+  customer_uid?: string;
   items: any[];
   total_price: number;
   status: 'Pending' | 'Accepted' | 'Preparing' | 'Serving' | 'Completed' | 'Cancelled' | 'Paid';
@@ -46,6 +49,7 @@ export interface LaundryOrder {
   guest_name: string;
   room_number?: string;
   customer_email?: string;
+  customer_uid?: string;
   items: any[];
   total_price: number;
   status: 'Received' | 'In Progress' | 'Ready' | 'Delivered';
@@ -90,4 +94,5 @@ export interface Notification {
   read: boolean;
   created_at: string;
   orderId?: string;
+  targetTab?: string;
 }

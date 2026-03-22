@@ -35,7 +35,9 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   createUserWithEmailAndPassword,
-  getAuth
+  getAuth,
+  sendPasswordResetEmail,
+  signInAnonymously
 } from 'firebase/auth';
 import { initializeApp, getApp, deleteApp } from 'firebase/app';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -164,10 +166,11 @@ class ErrorBoundary extends React.Component<any, any> {
 
 // --- Components ---
 
-const NotificationCenter = ({ notifications, onClose, onMarkAsRead }: { 
+const NotificationCenter = ({ notifications, onClose, onMarkAsRead, onNavigate }: { 
   notifications: Notification[], 
   onClose: () => void,
-  onMarkAsRead: (id: string) => void 
+  onMarkAsRead: (id: string) => void,
+  onNavigate: (type: string, title: string) => void
 }) => {
   return (
     <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-black/5 z-[100] overflow-hidden">
@@ -187,7 +190,11 @@ const NotificationCenter = ({ notifications, onClose, onMarkAsRead }: {
             <div 
               key={notif.id} 
               className={`p-4 border-bottom border-black/5 last:border-0 transition-colors cursor-pointer hover:bg-gray-50 ${!notif.read ? 'bg-blue-50/30' : ''}`}
-              onClick={() => onMarkAsRead(notif.id)}
+              onClick={() => {
+                onMarkAsRead(notif.id);
+                onNavigate(notif.type, notif.title);
+                onClose();
+              }}
             >
               <div className="flex items-start gap-3">
                 <div className={`p-2 rounded-lg ${
@@ -224,15 +231,40 @@ const LoginPage = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setError('Password reset email sent! Please check your inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset email');
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await signInAnonymously(auth);
+    } catch (err: any) {
+      setError(err.message || 'Guest login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
       if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
-        // Create customer profile
-        await setDoc(doc(db, 'users', email), {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Create customer profile using UID as document ID
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
           username: email.split('@')[0],
           name: name || email.split('@')[0],
           role: 'Customer',
@@ -242,7 +274,24 @@ const LoginPage = () => {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      setError(err.message || 'Action failed');
+      console.error('Auth Error:', err.code, err.message);
+      if (err.code === 'auth/invalid-credential') {
+        let msg = 'Invalid email or password. If you haven\'t registered yet, please click "Register here" below.';
+        if (email === 'pahukenipensionhotelcc@gmail.com') {
+          msg += ' Tip: Try "Sign in with Google" for this admin account.';
+        }
+        setError(msg);
+      } else if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email. Please register first.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password. Please try again.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed login attempts. Please try again later or reset your password.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password login is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.');
+      } else {
+        setError(err.message || 'Authentication failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -283,19 +332,28 @@ const LoginPage = () => {
         </div>
         
         <div className="space-y-6">
-          <button 
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full py-4 bg-white text-black border border-black/10 rounded-xl font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-3 shadow-sm disabled:opacity-50"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            {isRegistering ? 'Register with Google' : 'Sign in with Google'}
-          </button>
+          <div className="grid grid-cols-1 gap-3">
+            <button 
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full py-4 bg-white text-black border border-black/10 rounded-xl font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-3 shadow-sm disabled:opacity-50"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              {isRegistering ? 'Register with Google' : 'Sign in with Google'}
+            </button>
+            <button 
+              onClick={handleGuestLogin}
+              disabled={loading}
+              className="w-full py-3 bg-[#f5f5f5] text-black/60 border border-black/5 rounded-xl text-xs font-mono uppercase hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Sign in as Guest
+            </button>
+          </div>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -332,7 +390,18 @@ const LoginPage = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-mono uppercase text-black/40 mb-2">Password</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-mono uppercase text-black/40">Password</label>
+                {!isRegistering && (
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-[10px] font-mono uppercase text-black/30 hover:text-black transition-colors"
+                  >
+                    Forgot?
+                  </button>
+                )}
+              </div>
               <input 
                 type="password" 
                 value={password}
@@ -342,7 +411,7 @@ const LoginPage = () => {
                 required
               />
             </div>
-            {error && <p className="text-red-500 text-xs font-mono">{error}</p>}
+            {error && <p className="text-red-500 text-xs font-mono leading-relaxed">{error}</p>}
             <button 
               type="submit"
               disabled={loading}
@@ -691,7 +760,10 @@ const POSModule = ({ type, menu, orders, isAdmin, userRole, user, createNotifica
         total_price: total,
         status: 'Pending',
         type,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        // If staff is placing order for a customer, we might not have their UID here
+        // but we can mark it as staff-placed
+        placed_by: userRole
       });
 
       // Notify relevant staff
@@ -1639,11 +1711,11 @@ const LaundryModule = ({ orders, services, isAdmin, userRole, user, createNotifi
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {services.map((service) => (
-              <motion.button 
+              <motion.div 
                 key={service.id} 
                 whileTap={{ scale: 0.98 }}
                 onClick={() => !isAdmin && addToCart(service)}
-                className="bg-white p-4 rounded-xl border border-black/5 shadow-sm flex justify-between items-center group text-left"
+                className="bg-white p-4 rounded-xl border border-black/5 shadow-sm flex justify-between items-center group text-left cursor-pointer"
               >
                 <div>
                   <p className="font-medium">{service.name}</p>
@@ -1657,7 +1729,7 @@ const LaundryModule = ({ orders, services, isAdmin, userRole, user, createNotifi
                     <X size={14} />
                   </button>
                 )}
-              </motion.button>
+              </motion.div>
             ))}
           </div>
         )}
@@ -1933,6 +2005,7 @@ const ConferenceModule = ({ rooms, services, bookings, isAdmin, userRole, user, 
         room_name: selectedFacility.name,
         client_name: newBooking.client_name,
         client_email: user?.email || '',
+        client_uid: user?.id || '',
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         services: newBooking.selectedServices,
@@ -2342,14 +2415,14 @@ const StaffModule = ({ users }: { users: User[] }) => {
       
       const secondaryAuth = getAuth(secondaryApp);
       
-      await createUserWithEmailAndPassword(secondaryAuth, newStaff.email, newStaff.password);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newStaff.email, newStaff.password);
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp);
 
       // 2. Save user details to Firestore
-      // Use email as the document ID for easier lookup in security rules
+      // Use UID as the document ID for consistency and security
       const { password, ...staffData } = newStaff;
-      await setDoc(doc(db, 'users', newStaff.email), {
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
         ...staffData,
         // We store the password as requested, though in production you'd rely on Firebase Auth
         password: password 
@@ -2555,10 +2628,27 @@ const CustomerPortal = ({
   myConferenceBookings: any[]
 }) => {
   const [activeTab, setActiveTab] = useState('home');
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<{ id: string, message: string, type: 'info' | 'success' | 'error' }[]>([]);
+  const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
+
+  const heroImages = [
+    'https://images.pexels.com/photos/189293/pexels-photo-189293.jpeg',
+    'https://images.pexels.com/photos/261102/pexels-photo-261102.jpeg',
+    'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg',
+    'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg',
+    'https://images.pexels.com/photos/2034330/pexels-photo-2034330.jpeg'
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentHeroIndex((prev) => (prev + 1) % heroImages.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const addToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -2573,6 +2663,7 @@ const CustomerPortal = ({
       const orderRef = await addDoc(collection(db, 'orders'), {
         customer_email: user.email,
         customer_name: user.name,
+        customer_uid: user.id,
         items: [{ ...item, quantity: 1 }],
         total_price: item.price,
         status: 'Pending',
@@ -2601,6 +2692,7 @@ const CustomerPortal = ({
       const orderRef = await addDoc(collection(db, 'laundry_orders'), {
         customer_email: user.email,
         guest_name: user.name,
+        customer_uid: user.id,
         items: [{ ...service, quantity: 1 }],
         total_price: service.price,
         status: 'Received',
@@ -2656,6 +2748,19 @@ const CustomerPortal = ({
     });
     isInitialLoad.current = false;
   }, [myOrders, myLaundryOrders]);
+
+  const getRoomImage = (room: Room) => {
+    if (room.imageUrl && room.imageUrl.startsWith('https://images.pexels.com')) return room.imageUrl;
+    
+    // Fallback to Pexels based on category/number for consistent branding
+    if (room.category === 'Single') return 'https://images.pexels.com/photos/6466236/pexels-photo-6466236.jpeg';
+    if (room.number === '201') return 'https://images.pexels.com/photos/97083/pexels-photo-97083.jpeg';
+    if (room.number === '202') return 'https://images.pexels.com/photos/3659683/pexels-photo-3659683.jpeg';
+    if (room.category === 'VIP') return 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg';
+    if (room.category === 'Double') return 'https://images.pexels.com/photos/97083/pexels-photo-97083.jpeg';
+    
+    return room.imageUrl || `https://picsum.photos/seed/room${room.number}/800/600`;
+  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-mono">Loading Portal...</div>;
 
@@ -2722,6 +2827,11 @@ const CustomerPortal = ({
                       notifications={globalNotifications} 
                       onClose={() => setShowNotifications(false)} 
                       onMarkAsRead={markNotificationAsRead} 
+                      onNavigate={(type, title) => {
+                        if (type === 'order') setActiveTab('orders');
+                        if (type === 'laundry') setActiveTab('laundry');
+                        if (type === 'conference') setActiveTab('conference');
+                      }}
                     />
                   </div>
                 )}
@@ -2844,40 +2954,126 @@ const CustomerPortal = ({
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-8"
               >
-                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
-                  <h2 className="text-3xl font-serif italic mb-4">Welcome back, {user.name}</h2>
-                  <p className="text-black/60 leading-relaxed">
-                    Experience the finest hospitality at Pahukeni Pension. Browse our services, 
-                    order from our restaurant, or book your next stay directly from this portal.
-                  </p>
+                <div className="relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl group">
+                  <AnimatePresence mode="wait">
+                    <motion.img 
+                      key={currentHeroIndex}
+                      src={heroImages[currentHeroIndex]} 
+                      alt="Luxury Hotel"
+                      initial={{ opacity: 0, scale: 1.1 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      className="absolute inset-0 w-full h-full object-cover brightness-75"
+                      referrerPolicy="no-referrer"
+                    />
+                  </AnimatePresence>
+                  
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8 md:p-12">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <h2 className="text-4xl md:text-6xl font-serif italic text-white mb-4 tracking-tight">Welcome back, {user.name}</h2>
+                      <p className="text-white/80 max-w-xl text-sm md:text-base leading-relaxed font-light">
+                        Experience the finest hospitality at Pahukeni Pension. Your sanctuary of comfort and refined living awaits.
+                      </p>
+                    </motion.div>
+                    
+                    <div className="flex gap-2 mt-8">
+                      {heroImages.map((_, idx) => (
+                        <div 
+                          key={idx}
+                          className={`h-1 rounded-full transition-all duration-500 ${idx === currentHeroIndex ? 'w-8 bg-white' : 'w-2 bg-white/30'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-emerald-900 text-white p-8 rounded-2xl shadow-xl relative overflow-hidden group">
-                    <div className="relative z-10">
-                      <h3 className="text-xl font-serif italic mb-2">Ready for Dinner?</h3>
-                      <p className="text-white/70 text-sm mb-6">Explore our restaurant menu and order to your room.</p>
-                      <button 
-                        onClick={() => setActiveTab('dining')}
-                        className="px-6 py-2 bg-white text-emerald-900 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors"
-                      >
-                        View Menu
-                      </button>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <Utensils size={24} />
                     </div>
-                    <Utensils className="absolute -right-4 -bottom-4 text-white/10 w-32 h-32 transform -rotate-12 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-lg font-serif italic mb-2">Fine Dining</h3>
+                    <p className="text-sm opacity-60 mb-6">Order exquisite meals directly to your room.</p>
+                    <button 
+                      onClick={() => setActiveTab('dining')}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Explore Menu
+                    </button>
                   </div>
-                  <div className="bg-[#141414] text-white p-8 rounded-2xl shadow-xl relative overflow-hidden group">
-                    <div className="relative z-10">
-                      <h3 className="text-xl font-serif italic mb-2">Need Laundry?</h3>
-                      <p className="text-white/70 text-sm mb-6">Professional cleaning services at your fingertips.</p>
-                      <button 
-                        onClick={() => setActiveTab('laundry')}
-                        className="px-6 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
-                      >
-                        Request Service
-                      </button>
+                  
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <WashingMachine size={24} />
                     </div>
-                    <WashingMachine className="absolute -right-4 -bottom-4 text-white/10 w-32 h-32 transform rotate-12 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-lg font-serif italic mb-2">Laundry Service</h3>
+                    <p className="text-sm opacity-60 mb-6">Professional care for your finest garments.</p>
+                    <button 
+                      onClick={() => setActiveTab('laundry')}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Request Service
+                    </button>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <Users size={24} />
+                    </div>
+                    <h3 className="text-lg font-serif italic mb-2">Conferences</h3>
+                    <p className="text-sm opacity-60 mb-6">World-class facilities for your business needs.</p>
+                    <button 
+                      onClick={() => setActiveTab('conference')}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Book a Room
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex justify-between items-end">
+                    <h3 className="text-2xl font-serif italic">Curated Spaces</h3>
+                    <button 
+                      onClick={() => setActiveTab('rooms')}
+                      className="text-xs font-mono uppercase text-black/40 hover:text-black transition-colors flex items-center gap-1"
+                    >
+                      View All Rooms <ChevronRight size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {rooms.slice(0, 3).map((room) => (
+                      <div 
+                        key={room.id} 
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setActiveTab('rooms');
+                        }}
+                        className="group cursor-pointer"
+                      >
+                        <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-4 relative shadow-md">
+                          <img 
+                            src={getRoomImage(room)} 
+                            alt={room.category}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
+                            <p className="text-white text-xs font-mono uppercase tracking-widest mb-1">{room.category}</p>
+                            <p className="text-white text-lg font-serif italic">Room {room.number}</p>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <h4 className="text-sm font-serif italic">Room {room.number}</h4>
+                          <p className="text-[10px] font-mono uppercase text-black/40">N$ {room.price}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </motion.div>
@@ -2888,13 +3084,29 @@ const CustomerPortal = ({
                 key="rooms"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+                className="space-y-12"
               >
-                {rooms.map((room) => (
+                <div className="relative h-64 rounded-3xl overflow-hidden mb-12 shadow-lg">
+                  <img 
+                    src="https://images.pexels.com/photos/189293/pexels-photo-189293.jpeg" 
+                    alt="Luxury Living"
+                    className="w-full h-full object-cover brightness-50"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 flex flex-col justify-center p-12">
+                    <h2 className="text-5xl md:text-7xl font-serif italic text-white mb-4 tracking-tighter">Our Rooms</h2>
+                    <p className="text-white/70 max-w-md font-mono uppercase text-[10px] tracking-widest">
+                      Curated spaces designed for ultimate comfort and refined living.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {rooms.map((room) => (
                   <div key={room.id} className="bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm group">
                     <div className="h-48 overflow-hidden relative">
                       <img 
-                        src={room.imageUrl || `https://picsum.photos/seed/room${room.number}/800/600`} 
+                        src={getRoomImage(room)} 
                         alt={`Room ${room.number}`}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         referrerPolicy="no-referrer"
@@ -2904,25 +3116,43 @@ const CustomerPortal = ({
                       </div>
                     </div>
                     <div className="p-6">
-                      <div className="flex justify-between items-start mb-4">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
                           <h3 className="text-lg font-serif italic">Room {room.number}</h3>
-                          <p className="text-xs text-black/40 font-mono uppercase">{room.status}</p>
+                          <p className={`text-[10px] font-mono uppercase ${
+                            room.status === 'Available' ? 'text-emerald-600' : 'text-orange-600'
+                          }`}>{room.status}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-serif italic">N$ {room.price}</p>
                           <p className="text-[10px] text-black/40 font-mono uppercase">per night</p>
                         </div>
                       </div>
-                      <button 
-                        disabled={room.status !== 'Available'}
-                        className="w-full py-3 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-30 hover:bg-black/90 transition-colors"
-                      >
-                        {room.status === 'Available' ? 'Book Now' : 'Unavailable'}
-                      </button>
+                      
+                      {room.description && (
+                        <p className="text-sm text-black/60 line-clamp-2 mb-4 h-10">
+                          {room.description}
+                        </p>
+                      )}
+
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setSelectedRoom(room)}
+                          className="flex-1 py-3 bg-white border border-black/10 text-black rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          View Details
+                        </button>
+                        <button 
+                          disabled={room.status !== 'Available'}
+                          className="flex-1 py-3 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-30 hover:bg-black/90 transition-colors"
+                        >
+                          {room.status === 'Available' ? 'Book Now' : 'Unavailable'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
+                </div>
               </motion.div>
             )}
 
@@ -3109,6 +3339,93 @@ const CustomerPortal = ({
             )}
           </AnimatePresence>
         </main>
+
+        <AnimatePresence>
+          {selectedRoom && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-white rounded-3xl overflow-hidden shadow-2xl w-full max-w-2xl border border-black/5 flex flex-col md:flex-row max-h-[90vh]"
+              >
+                <div className="md:w-1/2 h-64 md:h-auto relative">
+                  <img 
+                    src={getRoomImage(selectedRoom)} 
+                    alt={`Room ${selectedRoom.number}`}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <button 
+                    onClick={() => setSelectedRoom(null)}
+                    className="absolute top-4 left-4 p-2 bg-white/90 backdrop-blur-sm rounded-full text-black hover:bg-white transition-colors md:hidden"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="md:w-1/2 p-8 flex flex-col overflow-y-auto">
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-black/40 mb-1 block">
+                        {selectedRoom.category}
+                      </span>
+                      <h3 className="text-3xl font-serif italic">Room {selectedRoom.number}</h3>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedRoom(null)}
+                      className="hidden md:block p-2 text-black/20 hover:text-black transition-colors"
+                    >
+                      <X size={24} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6 flex-1">
+                    <div>
+                      <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40 mb-2">Description</h4>
+                      <p className="text-sm text-black/70 leading-relaxed">
+                        {selectedRoom.description || 'Experience comfort and style in our carefully curated rooms.'}
+                      </p>
+                    </div>
+
+                    {selectedRoom.amenities && selectedRoom.amenities.length > 0 && (
+                      <div>
+                        <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40 mb-2">Amenities</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {selectedRoom.amenities.map((amenity, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-black/60">
+                              <CheckCircle2 size={12} className="text-emerald-500" />
+                              <span>{amenity}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-6 border-t border-black/5 mt-auto">
+                      <div className="flex justify-between items-end mb-6">
+                        <div>
+                          <p className="text-[10px] font-mono uppercase text-black/40">Price per night</p>
+                          <p className="text-2xl font-serif italic">N$ {selectedRoom.price}</p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase ${
+                          selectedRoom.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'
+                        }`}>
+                          {selectedRoom.status}
+                        </div>
+                      </div>
+                      <button 
+                        disabled={selectedRoom.status !== 'Available'}
+                        className="w-full py-4 bg-black text-white rounded-2xl font-medium disabled:opacity-30 hover:bg-black/90 transition-all shadow-xl shadow-black/10"
+                      >
+                        {selectedRoom.status === 'Available' ? 'Book This Room' : 'Currently Unavailable'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -3143,7 +3460,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // Developer bypass for initial setup
-        if (['btutu427@gmail.com', 'pahukenipensionhotelcc@gmail.com'].includes(firebaseUser.email)) {
+        if (firebaseUser.email && ['btutu427@gmail.com', 'pahukenipensionhotelcc@gmail.com'].includes(firebaseUser.email)) {
           setUser({ 
             id: firebaseUser.uid, 
             username: 'developer', 
@@ -3156,35 +3473,47 @@ export default function App() {
           return;
         }
 
-        // Check if user is registered in the system
-        if (!firebaseUser.email) {
-          await signOut(auth);
-          setUser(null);
-          setAuthReady(true);
-          return;
-        }
-
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.email));
+          // Try fetching by UID first (new standard)
+          let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          
+          // Fallback to email for legacy users
+          if (!userDoc.exists() && firebaseUser.email) {
+            userDoc = await getDoc(doc(db, 'users', firebaseUser.email));
+          }
 
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            setUser({ id: userDoc.id, ...userData } as User);
+            // If it was a legacy email-based document, migrate it to UID-based
+            if (userDoc.id === firebaseUser.email) {
+              const migratedData = {
+                username: userData.username || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'user'),
+                name: userData.name || (firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User')),
+                role: userData.role || 'Customer',
+                email: userData.email || firebaseUser.email
+              };
+              await setDoc(doc(db, 'users', firebaseUser.uid), migratedData);
+              setUser({ id: firebaseUser.uid, ...migratedData } as User);
+            } else {
+              setUser({ id: firebaseUser.uid, ...userData } as User);
+            }
           } else {
-            // If user doesn't exist in Firestore, they are a new customer
+            // If user doesn't exist in Firestore, they are a new customer or guest
+            const isAnonymous = firebaseUser.isAnonymous;
+            const email = firebaseUser.email || `guest_${firebaseUser.uid.slice(0, 8)}@pahukeni.com`;
             const newCustomerData = {
-              username: firebaseUser.email.split('@')[0],
-              name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+              username: isAnonymous ? 'guest' : email.split('@')[0],
+              name: firebaseUser.displayName || (isAnonymous ? 'Guest User' : email.split('@')[0]),
               role: 'Customer',
-              email: firebaseUser.email
+              email: email
             };
-            await setDoc(doc(db, 'users', firebaseUser.email), newCustomerData);
-            setUser({ id: firebaseUser.email, ...newCustomerData } as User);
+            await setDoc(doc(db, 'users', firebaseUser.uid), newCustomerData);
+            setUser({ id: firebaseUser.uid, ...newCustomerData } as User);
           }
         } catch (error) {
           console.error('Error fetching user profile:', error);
-          await signOut(auth);
-          setUser(null);
+          // Don't sign out immediately, maybe it's a transient firestore error
+          // But if it's persistent, we might need to handle it
         }
       } else {
         setUser(null);
@@ -3211,7 +3540,7 @@ export default function App() {
     // Role-aware queries for orders
     const ordersQuery = isStaff 
       ? collection(db, 'orders')
-      : query(collection(db, 'orders'), where('customer_email', '==', user.email));
+      : query(collection(db, 'orders'), where('customer_uid', '==', user.id));
 
     const unsubOrders = onSnapshot(ordersQuery, (snapshot) => {
       const newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
@@ -3240,7 +3569,7 @@ export default function App() {
     // Role-aware queries for laundry
     const laundryQuery = isStaff
       ? collection(db, 'laundry_orders')
-      : query(collection(db, 'laundry_orders'), where('customer_email', '==', user.email));
+      : query(collection(db, 'laundry_orders'), where('customer_uid', '==', user.id));
 
     const unsubLaundry = onSnapshot(laundryQuery, (snapshot) => {
       const newLaundry = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaundryOrder));
@@ -3261,7 +3590,7 @@ export default function App() {
     // Role-aware queries for room bookings
     const bookingsQuery = isStaff
       ? collection(db, 'room_bookings')
-      : query(collection(db, 'room_bookings'), where('guest_email', '==', user.email));
+      : query(collection(db, 'room_bookings'), where('guest_uid', '==', user.id));
 
     const unsubBookings = onSnapshot(bookingsQuery, (snapshot) => {
       setBookings(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -3289,7 +3618,7 @@ export default function App() {
     // Role-aware queries for conference bookings
     const confBookingsQuery = isStaff
       ? collection(db, 'conference_bookings')
-      : query(collection(db, 'conference_bookings'), where('client_email', '==', user.email));
+      : query(collection(db, 'conference_bookings'), where('client_uid', '==', user.id));
 
     const unsubConfBookings = onSnapshot(confBookingsQuery, (snapshot) => {
       const newBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -3310,7 +3639,7 @@ export default function App() {
     // Listen to persistent notifications
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', user.email || ''),
+      where('userId', '==', user.id),
       orderBy('created_at', 'desc')
     );
     const unsubNotifs = onSnapshot(q, (snapshot) => {
@@ -3378,6 +3707,42 @@ export default function App() {
     };
   }, [user]);
 
+  // Migration for room images to use local paths
+  useEffect(() => {
+    if (authReady && user && rooms.length > 0) {
+      const migrateImages = async () => {
+        // Only run migration if user is Admin or Receptionist to avoid permission errors
+        if (user.role !== 'Admin' && user.role !== 'Receptionist') return;
+
+        const roomsToUpdate = rooms.filter(r => 
+          !r.imageUrl?.startsWith('https://images.pexels.com') || 
+          r.imageUrl?.includes('picsum.photos') || 
+          r.imageUrl?.includes('/rooms/')
+        );
+
+        if (roomsToUpdate.length > 0) {
+          for (const room of roomsToUpdate) {
+            let newUrl = room.imageUrl;
+            if (room.category === 'Single') newUrl = 'https://images.pexels.com/photos/6466236/pexels-photo-6466236.jpeg';
+            else if (room.number === '201') newUrl = 'https://images.pexels.com/photos/97083/pexels-photo-97083.jpeg';
+            else if (room.number === '202') newUrl = 'https://images.pexels.com/photos/3659683/pexels-photo-3659683.jpeg';
+            else if (room.category === 'VIP') newUrl = 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg';
+            else if (room.category === 'Double') newUrl = 'https://images.pexels.com/photos/97083/pexels-photo-97083.jpeg';
+
+            if (newUrl !== room.imageUrl) {
+              try {
+                await updateDoc(doc(db, 'rooms', room.id), { imageUrl: newUrl });
+              } catch (err) {
+                console.error('Failed to migrate room image:', err);
+              }
+            }
+          }
+        }
+      };
+      migrateImages();
+    }
+  }, [authReady, user, rooms]);
+
   const createNotification = async (notif: Omit<Notification, 'id' | 'read' | 'created_at'>) => {
     try {
       // Create for the intended role/user
@@ -3426,11 +3791,51 @@ export default function App() {
       const roomSnap = await getDocs(collection(db, 'rooms'));
       if (roomSnap.empty) {
         const initialRooms = [
-          { number: '101', category: 'Single', price: 450, status: 'Available', imageUrl: 'https://picsum.photos/seed/room101/800/600' },
-          { number: '102', category: 'Single', price: 450, status: 'Available', imageUrl: 'https://picsum.photos/seed/room102/800/600' },
-          { number: '201', category: 'Double', price: 750, status: 'Occupied', imageUrl: 'https://picsum.photos/seed/room201/800/600' },
-          { number: '202', category: 'Double', price: 750, status: 'Available', imageUrl: 'https://picsum.photos/seed/room202/800/600' },
-          { number: '301', category: 'VIP', price: 1200, status: 'Available', imageUrl: 'https://picsum.photos/seed/room301/800/600' },
+          { 
+            number: '101', 
+            category: 'Single', 
+            price: 450, 
+            status: 'Available', 
+            imageUrl: 'https://images.pexels.com/photos/6466236/pexels-photo-6466236.jpeg',
+            description: 'A cozy single room perfect for solo travelers, featuring a comfortable bed, a dedicated workspace, and a large window with garden views.',
+            amenities: ['Free Wi-Fi', 'Workspace', 'En-suite Bathroom', 'Coffee Station']
+          },
+          { 
+            number: '102', 
+            category: 'Single', 
+            price: 450, 
+            status: 'Available', 
+            imageUrl: 'https://images.pexels.com/photos/6466236/pexels-photo-6466236.jpeg',
+            description: 'Modern single room with all essential amenities for a productive and comfortable stay.',
+            amenities: ['Free Wi-Fi', 'Workspace', 'Smart TV', 'Air Conditioning']
+          },
+          { 
+            number: '201', 
+            category: 'Double', 
+            price: 750, 
+            status: 'Occupied', 
+            imageUrl: 'https://images.pexels.com/photos/97083/pexels-photo-97083.jpeg',
+            description: 'Spacious double room with a modern wooden headboard, large windows, and contemporary decor.',
+            amenities: ['King Size Bed', 'Mini Bar', 'Safe', 'City View']
+          },
+          { 
+            number: '202', 
+            category: 'Double', 
+            price: 750, 
+            status: 'Available', 
+            imageUrl: 'https://images.pexels.com/photos/3659683/pexels-photo-3659683.jpeg',
+            description: 'Stylish double room featuring elegant blue accents, premium linens, and a relaxing atmosphere.',
+            amenities: ['King Size Bed', 'Lounge Chair', 'Premium Toiletries', 'Balcony']
+          },
+          { 
+            number: '301', 
+            category: 'VIP', 
+            price: 1200, 
+            status: 'Available', 
+            imageUrl: 'https://images.pexels.com/photos/164595/pexels-photo-164595.jpeg',
+            description: 'Our flagship luxury suite offering the ultimate in elegance and comfort. Features a king bed, separate living area, and panoramic views.',
+            amenities: ['King Suite', 'Private Balcony', 'Jacuzzi', 'Butler Service', 'Complimentary Champagne']
+          },
         ];
         for (const r of initialRooms) await addDoc(collection(db, 'rooms'), r);
 
@@ -3464,12 +3869,12 @@ export default function App() {
         for (const s of initialConfServices) await addDoc(collection(db, 'conference_services'), s);
 
         // Create admin user doc
-        if (auth.currentUser && auth.currentUser.email) {
-          await setDoc(doc(db, 'users', auth.currentUser.email), {
+        if (auth.currentUser) {
+          await setDoc(doc(db, 'users', auth.currentUser.uid), {
             username: 'admin',
             name: 'Administrator',
             role: 'Admin',
-            email: auth.currentUser.email
+            email: auth.currentUser.email || 'admin@pahukeni.com'
           });
         }
       }
@@ -3636,6 +4041,14 @@ export default function App() {
                         notifications={notifications} 
                         onClose={() => setShowNotifications(false)} 
                         onMarkAsRead={markNotificationAsRead} 
+                        onNavigate={(type, title) => {
+                          if (type === 'order') {
+                            if (title?.toLowerCase().includes('bar')) setActiveTab('bar');
+                            else setActiveTab('restaurant');
+                          }
+                          if (type === 'laundry') setActiveTab('laundry');
+                          if (type === 'conference') setActiveTab('conference');
+                        }}
                       />
                     </div>
                   )}

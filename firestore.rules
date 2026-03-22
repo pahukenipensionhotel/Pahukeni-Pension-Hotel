@@ -8,42 +8,56 @@ function isAuthenticated() {
 
 function isAdmin() {
   return isAuthenticated() && (
-    (request.auth.token.email in ["btutu427@gmail.com", "pahukenipensionhotelcc@gmail.com"] && request.auth.token.email_verified == true) ||
-    (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Admin')
+    (request.auth.token.email != null && request.auth.token.email in ["btutu427@gmail.com", "pahukenipensionhotelcc@gmail.com"]) ||
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin')
   );
 }
 
 function isReceptionist() {
-  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Receptionist';
+  return isAuthenticated() && (
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Receptionist')
+  );
 }
 
 function isWaiter() {
-  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Waiter';
+  return isAuthenticated() && (
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Waiter') ||
+    (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Waiter')
+  );
 }
 
 function isBarman() {
-  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Barman';
+  return isAuthenticated() && (
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Barman') ||
+    (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Barman')
+  );
 }
 
 function isLaundryStaff() {
-  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Laundry';
+  return isAuthenticated() && (
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Laundry') ||
+    (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Laundry')
+  );
 }
 
 function isCustomer() {
-  return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Customer';
+  return isAuthenticated() && (
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Customer') ||
+    (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'Customer')
+  );
 }
 
 function isStaff() {
   return isAuthenticated() && (
     isAdmin() || 
-    (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && (
-      get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry']
+    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry']
     ))
   );
 }
 
-function isOwner(email) {
-  return isAuthenticated() && request.auth.token.email == email;
+function isOwner(uid) {
+  return isAuthenticated() && request.auth.uid == uid;
 }
 
 function hasOnlyAllowedFields(fields) {
@@ -63,17 +77,21 @@ function isValidDateTime(dateTime) {
 // ===============================================================
 
 function isValidUser(data) {
-  return data.username is string && data.username.size() > 0 && data.username.size() < 50 &&
+  return (data.username == null || (data.username is string && data.username.size() > 0 && data.username.size() < 50)) &&
          data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
          data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry', 'Customer'] &&
          (data.email == null || isValidEmail(data.email));
 }
 
 function isValidRoom(data) {
-  return data.number is string && data.number.size() > 0 && data.number.size() < 10 &&
-         data.category in ['Single', 'Double', 'VIP', 'Suite'] &&
-         data.price is number && data.price >= 0 &&
-         data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance'];
+  return (request.method == 'update' || data.keys().hasAll(['number', 'category', 'price', 'status'])) &&
+         (data.number == null || (data.number is string && data.number.size() > 0 && data.number.size() < 10)) &&
+         (data.category == null || data.category in ['Single', 'Double', 'VIP', 'Suite', 'Standard', 'Deluxe']) &&
+         (data.price == null || (data.price is number && data.price >= 0)) &&
+         (data.status == null || data.status in ['Available', 'Occupied', 'Cleaning', 'Maintenance', 'Booked', 'Checked In', 'Checked Out']) &&
+         (data.description == null || (data.description is string && data.description.size() < 2000)) &&
+         (data.amenities == null || (data.amenities is list && data.amenities.size() <= 50)) &&
+         (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() < 1000));
 }
 
 function isValidMenuItem(data) {
@@ -96,7 +114,7 @@ function isValidLaundryOrder(data) {
   return data.guest_name is string && data.guest_name.size() > 0 &&
          data.items is list && data.items.size() > 0 &&
          data.total_price is number && data.total_price >= 0 &&
-         data.status in ['Pending', 'In Progress', 'Ready', 'Delivered'] &&
+         data.status in ['Received', 'In Progress', 'Ready', 'Delivered'] &&
          isValidDateTime(data.created_at);
 }
 
@@ -132,15 +150,26 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.token.email == userId || isAdmin());
-      allow create: if isAuthenticated() && (request.auth.token.email == userId || isAdmin()) && isValidUser(request.resource.data);
-      allow update: if isAuthenticated() && (request.auth.token.email == userId || isAdmin()) && isValidUser(request.resource.data);
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        (request.auth.token.email != null && request.auth.token.email == userId) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        (request.auth.token.email != null && request.auth.token.email == userId) || 
+        isAdmin()
+      ) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        (request.auth.token.email != null && request.auth.token.email == userId) || 
+        isAdmin()
+      ) && isValidUser(request.resource.data);
       allow delete: if isAdmin();
     }
 
     match /rooms/{roomId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isReceptionist();
+      allow read, write: if isAuthenticated();
     }
 
     match /menu_items/{itemId} {
@@ -150,15 +179,15 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if isAuthenticated() && (resource.data.customer_email == request.auth.token.email || isStaff());
-      allow create: if isAuthenticated() && (request.resource.data.customer_email == request.auth.token.email || isStaff()) && isValidOrder(request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.customer_uid == request.auth.uid || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.customer_uid == request.auth.uid || isStaff()) && isValidOrder(request.resource.data);
       allow update: if isStaff() && isValidOrder(request.resource.data);
       allow delete: if isAdmin();
     }
 
     match /laundry_orders/{orderId} {
-      allow read: if isAuthenticated() && (resource.data.customer_email == request.auth.token.email || isStaff());
-      allow create: if isAuthenticated() && (request.resource.data.customer_email == request.auth.token.email || isStaff()) && isValidLaundryOrder(request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.customer_uid == request.auth.uid || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.customer_uid == request.auth.uid || isStaff()) && isValidLaundryOrder(request.resource.data);
       allow update: if isStaff() && isValidLaundryOrder(request.resource.data);
       allow delete: if isAdmin();
     }
@@ -174,8 +203,8 @@ service cloud.firestore {
     }
 
     match /conference_bookings/{bookingId} {
-      allow read: if isAuthenticated() && (resource.data.client_email == request.auth.token.email || isStaff());
-      allow create: if isAuthenticated() && (request.resource.data.client_email == request.auth.token.email || isStaff()) && isValidConferenceBooking(request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.client_uid == request.auth.uid || isStaff());
+      allow create: if isAuthenticated() && (request.resource.data.client_uid == request.auth.uid || isStaff()) && isValidConferenceBooking(request.resource.data);
       allow update: if isStaff() && isValidConferenceBooking(request.resource.data);
       allow delete: if isAdmin();
     }
@@ -186,7 +215,7 @@ service cloud.firestore {
     }
 
     match /room_bookings/{bookingId} {
-      allow read: if isAuthenticated() && (resource.data.guest_email == request.auth.token.email || isStaff());
+      allow read: if isAuthenticated() && (resource.data.guest_uid == request.auth.uid || isStaff());
       allow create: if isStaff() && isValidRoomBooking(request.resource.data);
       allow update: if isStaff() && isValidRoomBooking(request.resource.data);
       allow delete: if isAdmin();
@@ -194,7 +223,7 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && (
-        request.auth.token.email == resource.data.userId || 
+        request.auth.uid == resource.data.userId || 
         (resource.data.role != null && (
           (resource.data.role == 'Waiter' && isWaiter()) ||
           (resource.data.role == 'Barman' && isBarman()) ||
@@ -207,7 +236,7 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() && isValidNotification(request.resource.data);
       allow update: if isAuthenticated() && (
-        request.auth.token.email == resource.data.userId || 
+        request.auth.uid == resource.data.userId || 
         (resource.data.role != null && (
           (resource.data.role == 'Waiter' && isWaiter()) ||
           (resource.data.role == 'Barman' && isBarman()) ||
