@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#fff3b0"/>
+  <rect x="280" y="140" width="180" height="320" rx="26" fill="#ffd166"/>
+  <rect x="460" y="180" width="70" height="180" rx="30" fill="none" stroke="#9c6644" stroke-width="28"/>
+  <rect x="295" y="170" width="150" height="230" rx="18" fill="#fcbf49"/>
+  <rect x="295" y="135" width="150" height="55" rx="18" fill="#ffffff" opacity="0.85"/>
+  <text x="120" y="100" fill="#7f5539" font-family="Georgia, serif" font-size="56">Windhoek Lager</text>
+</svg>

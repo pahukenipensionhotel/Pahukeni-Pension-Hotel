@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#f8edeb"/>
+  <path d="M300 130h200v90c0 95-70 160-100 185-30-25-100-90-100-185z" fill="#6a040f"/>
+  <path d="M350 400h100v90h70v35H280v-35h70z" fill="#9d0208"/>
+  <rect x="388" y="305" width="24" height="110" fill="#9d0208"/>
+  <text x="125" y="100" fill="#370617" font-family="Georgia, serif" font-size="56">Red Wine Glass</text>
+</svg>

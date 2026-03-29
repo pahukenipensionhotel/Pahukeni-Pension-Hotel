@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#f1faee"/>
+  <circle cx="400" cy="320" r="180" fill="#a8dadc"/>
+  <circle cx="330" cy="280" r="42" fill="#e63946"/>
+  <circle cx="470" cy="290" r="38" fill="#e63946"/>
+  <circle cx="370" cy="380" r="44" fill="#2a9d8f"/>
+  <circle cx="470" cy="390" r="44" fill="#2a9d8f"/>
+  <rect x="355" y="300" width="90" height="90" rx="18" fill="#f1faee"/>
+  <text x="120" y="110" fill="#1d3557" font-family="Georgia, serif" font-size="56">Greek Salad</text>
+</svg>

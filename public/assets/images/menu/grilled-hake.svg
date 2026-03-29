@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#edf6f9"/>
+  <ellipse cx="400" cy="320" rx="250" ry="145" fill="#d9ed92"/>
+  <ellipse cx="400" cy="320" rx="180" ry="90" fill="#94d2bd"/>
+  <polygon points="570,320 670,260 670,380" fill="#0a9396"/>
+  <circle cx="280" cy="305" r="12" fill="#005f73"/>
+  <text x="90" y="110" fill="#005f73" font-family="Georgia, serif" font-size="56">Grilled Hake</text>
+</svg>
