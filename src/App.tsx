@@ -177,6 +177,47 @@ function getDefaultRoomImage(room: Pick<Room, "category" | "number">) {
   return LOCAL_ASSETS.rooms.single;
 }
 
+function getDefaultMenuImage(
+  item: Pick<MenuItem, "name" | "type" | "category" | "imageUrl">,
+) {
+  const normalizedName = item.name.trim().toLowerCase();
+
+  if (normalizedName === "t-bone steak") return LOCAL_ASSETS.menu.steak;
+  if (normalizedName === "grilled hake") return LOCAL_ASSETS.menu.fish;
+  if (normalizedName === "greek salad") return LOCAL_ASSETS.menu.salad;
+  if (normalizedName === "windhoek lager") return LOCAL_ASSETS.menu.beer;
+  if (normalizedName === "red wine glass") return LOCAL_ASSETS.menu.wine;
+
+  if (
+    item.imageUrl &&
+    item.imageUrl.startsWith("/assets/images/") &&
+    !item.imageUrl.endsWith(".svg")
+  ) {
+    return item.imageUrl;
+  }
+
+  if (item.type === "Bar" || item.category === "Drinks") {
+    return LOCAL_ASSETS.showcase.bar[0];
+  }
+
+  return LOCAL_ASSETS.showcase.restaurant[0];
+}
+
+function getMenuImage(
+  item: Pick<MenuItem, "name" | "type" | "category" | "imageUrl">,
+) {
+  if (
+    item.imageUrl &&
+    !item.imageUrl.includes("picsum.photos") &&
+    !item.imageUrl.includes("pexels.com") &&
+    !item.imageUrl.endsWith(".svg")
+  ) {
+    return item.imageUrl;
+  }
+
+  return getDefaultMenuImage(item);
+}
+
 function getHashTab(
   scope: "staff" | "portal",
   validTabs: Set<string>,
@@ -1071,7 +1112,7 @@ const POSModule = ({
       : {
           title: "Bar Atmosphere",
           description:
-            "The bar workspace now carries actual venue photography instead of generic placeholders.",
+            "The bar workspace now carries actual venue photography from the property.",
           images: LOCAL_ASSETS.showcase.bar,
         };
 
@@ -1414,7 +1455,7 @@ const POSModule = ({
                       >
                         <div className="mb-4 overflow-hidden rounded-2xl border border-black/5 bg-[#F5F5F0] aspect-[4/3]">
                           <img
-                            src={item.imageUrl || moduleShowcase.images[0]}
+                            src={getMenuImage(item)}
                             alt={item.name}
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
@@ -3797,8 +3838,9 @@ const CustomerPortal = ({
   const getRoomImage = (room: Room) => {
     if (
       room.imageUrl &&
+      !room.imageUrl.includes("pexels.com") &&
       !room.imageUrl.includes("picsum.photos") &&
-      !room.imageUrl.includes("/rooms/")
+      !room.imageUrl.startsWith("/rooms/")
     ) {
       return room.imageUrl;
     }
@@ -4191,10 +4233,9 @@ const CustomerPortal = ({
               >
                 <div className="relative h-64 rounded-3xl overflow-hidden mb-12 shadow-lg">
                   <img
-                    src="https://images.pexels.com/photos/189293/pexels-photo-189293.jpeg"
+                    src={LOCAL_ASSETS.hero[1]}
                     alt="Luxury Living"
                     className="w-full h-full object-cover brightness-50"
-                    referrerPolicy="no-referrer"
                   />
                   <div className="absolute inset-0 flex flex-col justify-center p-12">
                     <h2 className="text-5xl md:text-7xl font-serif italic text-white mb-4 tracking-tighter">
@@ -4294,13 +4335,9 @@ const CustomerPortal = ({
                     >
                       <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
                         <img
-                          src={
-                            item.imageUrl ||
-                            `https://picsum.photos/seed/${item.name}/400/400`
-                          }
+                          src={getMenuImage(item)}
                           alt={item.name}
                           className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
                         />
                       </div>
                       <div className="flex-1 flex flex-col justify-between">
@@ -5037,15 +5074,15 @@ export default function App() {
   useEffect(() => {
     if (authReady && user && rooms.length > 0) {
       const migrateImages = async () => {
-        // Only run migration if user is Admin or Receptionist to avoid permission errors
-        if (user.role !== "Admin" && user.role !== "Receptionist") return;
+        // Only run migration when the current role is allowed to normalize media paths.
+        if (!canManagePosMenu(user.role) && !canManageRooms(user.role)) return;
 
         const roomsToUpdate = rooms.filter(
           (r) =>
             !r.imageUrl ||
             r.imageUrl?.startsWith("https://images.pexels.com") ||
             r.imageUrl?.includes("picsum.photos") ||
-            r.imageUrl?.includes("/rooms/"),
+            r.imageUrl?.startsWith("/rooms/"),
         );
 
         if (roomsToUpdate.length > 0) {
@@ -5063,10 +5100,38 @@ export default function App() {
             }
           }
         }
+
+        const menuItemsToUpdate = menu.filter((item) => {
+          const canonicalUrl = getDefaultMenuImage(item);
+          if (!item.imageUrl) return true;
+
+          return (
+            item.imageUrl.includes("picsum.photos") ||
+            item.imageUrl.includes("pexels.com") ||
+            item.imageUrl.endsWith(".svg") ||
+            item.imageUrl !== canonicalUrl
+          );
+        });
+
+        if (menuItemsToUpdate.length > 0) {
+          for (const item of menuItemsToUpdate) {
+            const newUrl = getDefaultMenuImage(item);
+
+            if (newUrl !== item.imageUrl) {
+              try {
+                await updateDoc(doc(db, "menu_items", item.id), {
+                  imageUrl: newUrl,
+                });
+              } catch (err) {
+                console.error("Failed to migrate menu image:", err);
+              }
+            }
+          }
+        }
       };
       migrateImages();
     }
-  }, [authReady, user, rooms]);
+  }, [authReady, menu, rooms, user]);
 
   const createNotification = async (
     notif: Omit<Notification, "id" | "read" | "created_at">,

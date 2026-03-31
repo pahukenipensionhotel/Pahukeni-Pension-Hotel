@@ -12,11 +12,11 @@ export const IMAGE_CATALOG = {
     vip: "/assets/images/rooms/vip-suite-exterior-01.jpg",
   },
   menu: {
-    steak: "/assets/images/menu/t-bone-steak.svg",
-    fish: "/assets/images/menu/grilled-hake.svg",
-    salad: "/assets/images/menu/greek-salad.svg",
-    beer: "/assets/images/menu/windhoek-lager.svg",
-    wine: "/assets/images/menu/red-wine-glass.svg",
+    steak: "/assets/images/menu/T-Bone_Steak.jpeg",
+    fish: "/assets/images/menu/Grilled_Hake.jpeg",
+    salad: "/assets/images/menu/Greek_Salad.jpeg",
+    beer: "/assets/images/drinks/Windhock_Lager.jpg",
+    wine: "/assets/images/drinks/Red_Wine_Glass.jpg",
   },
   showcase: {
     restaurant: [

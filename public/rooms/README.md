@@ -1,6 +1,2 @@
-# This directory is for room images.
-# Please upload the following files here:
-# - modern-double.jpg
-# - luxury-suite.jpg
-# - cozy-single.jpg
-# - stylish-double.jpg
+This legacy folder is not used by the application.
+Active room images are stored under `public/assets/images/rooms`.

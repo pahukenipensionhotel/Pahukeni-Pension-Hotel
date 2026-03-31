@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
-  <rect width="800" height="600" fill="#fef6e4"/>
-  <ellipse cx="400" cy="320" rx="240" ry="150" fill="#8d5524"/>
-  <ellipse cx="420" cy="320" rx="180" ry="110" fill="#c68642"/>
-  <circle cx="300" cy="300" r="34" fill="#f4f1de"/>
-  <text x="70" y="110" fill="#5c3d2e" font-family="Georgia, serif" font-size="56">T-Bone Steak</text>
-</svg>
