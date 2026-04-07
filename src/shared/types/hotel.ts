@@ -15,6 +15,9 @@ export interface Room {
   imageUrl?: string;
   description?: string;
   amenities?: string[];
+  breakfastIncluded?: boolean;
+  breakfastPrice?: number;
+  additionalServices?: { name: string; price: number }[];
 }
 
 export interface MenuItem {
