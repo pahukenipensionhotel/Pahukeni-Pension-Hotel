@@ -17,5 +17,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
   },
-  "exclude": ["functions"],
+  "exclude": ["functions", "src/functions-notify-skeleton.ts"],
 }
