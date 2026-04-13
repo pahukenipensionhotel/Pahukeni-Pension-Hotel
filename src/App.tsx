@@ -26,7 +26,7 @@ import {
   Bell,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import {
+import type {
   Stats,
   Room,
   MenuItem,
@@ -36,8 +36,8 @@ import {
   ConferenceRoom,
   ConferenceService,
   LaundryService,
-  Notification,
-} from "./types";
+  Notification as HotelNotification,
+} from "./shared/types/hotel";
 import { auth, db } from "./firebase";
 import { NotificationService } from "./services/notificationService";
 import {
@@ -63,11 +63,16 @@ import {
   requireText,
   sanitizeText,
   validateEmailAddress,
+  handleFirestoreError,
+  OperationType,
+  parseNumberInput,
 } from "./shared/validation/inputs";
 import { IMAGE_CATALOG } from "./shared/assets/imageCatalog";
 import { Dashboard as DashboardPage } from "./features/dashboard/components/Dashboard";
 import { LoginPage as AuthLoginPage } from "./features/auth/components/LoginPage";
 import { NotificationCenter as NotificationCenterPanel } from "./features/notifications/components/NotificationCenter";
+import { RoomsModule } from "./features/rooms/components/RoomsModule";
+import { RoomDetailsModal } from "./features/rooms/components/RoomDetailsModal";
 import { ErrorBoundary as AppErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
   createWorkflowNotification,
@@ -92,6 +97,7 @@ import {
 } from "firebase/auth";
 import { initializeApp, getApp, deleteApp } from "firebase/app";
 import firebaseConfig from "../firebase-applet-config.json";
+import usePushNotifications from "./hooks_usePushNotifications";
 import {
   collection,
   onSnapshot,
@@ -106,6 +112,7 @@ import {
   Timestamp,
   orderBy,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 // --- Error Boundary ---
@@ -118,35 +125,7 @@ interface ErrorBoundaryState {
   error: any;
 }
 
-// --- Error Handling ---
-enum OperationType {
-  CREATE = "create",
-  UPDATE = "update",
-  DELETE = "delete",
-  LIST = "list",
-  GET = "get",
-  WRITE = "write",
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  };
-}
-
+// --- Constants ---
 const LOCAL_ASSETS = IMAGE_CATALOG;
 
 const STAFF_TABS = new Set([
@@ -167,6 +146,10 @@ const PORTAL_TABS = new Set([
   "laundry",
   "conference",
 ]);
+
+function dedupeById<T extends { id: string }>(items: T[]) {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values());
+}
 
 function getDefaultRoomImage(room: Pick<Room, "category" | "number">) {
   if (room.category === "Single") return LOCAL_ASSETS.rooms.single;
@@ -243,34 +226,6 @@ function syncHashTab(scope: "staff" | "portal", tab: string) {
   }
 }
 
-function handleFirestoreError(
-  error: unknown,
-  operationType: OperationType,
-  path: string | null,
-) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData.map((provider) => ({
-          providerId: provider.providerId,
-          displayName: provider.displayName,
-          email: provider.email,
-          photoUrl: provider.photoURL,
-        })) || [],
-    },
-    operationType,
-    path,
-  };
-  console.error("Firestore Error: ", JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
 class ErrorBoundary extends React.Component<any, any> {
   state = { hasError: false, error: null };
 
@@ -320,21 +275,23 @@ class ErrorBoundary extends React.Component<any, any> {
 
 // --- Components ---
 
-const NotificationCenter = ({
+const HotelNotificationCenter = ({
   notifications,
   onClose,
   onMarkAsRead,
   onNavigate,
 }: {
-  notifications: Notification[];
+  notifications: HotelNotification[];
   onClose: () => void;
   onMarkAsRead: (id: string) => void;
   onNavigate: (type: string, title: string) => void;
 }) => {
+  const uniqueHotelNotifications = dedupeById(notifications);
+
   return (
     <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-black/5 z-[100] overflow-hidden">
       <div className="p-4 border-bottom border-black/5 flex items-center justify-between bg-gray-50">
-        <h3 className="text-sm font-serif italic">Notifications</h3>
+        <h3 className="text-sm font-serif italic">HotelNotifications</h3>
         <button
           onClick={onClose}
           className="p-1 hover:bg-black/5 rounded-full transition-colors"
@@ -343,12 +300,12 @@ const NotificationCenter = ({
         </button>
       </div>
       <div className="max-h-96 overflow-y-auto">
-        {notifications.length === 0 ? (
+        {uniqueHotelNotifications.length === 0 ? (
           <div className="p-8 text-center text-black/20 font-mono text-xs">
             No notifications
           </div>
         ) : (
-          notifications.map((notif) => (
+          uniqueHotelNotifications.map((notif) => (
             <div
               key={notif.id}
               className={`p-4 border-bottom border-black/5 last:border-0 transition-colors cursor-pointer hover:bg-gray-50 ${!notif.read ? "bg-blue-50/30" : ""}`}
@@ -1852,7 +1809,7 @@ const POSModule = ({
                     onChange={(e) =>
                       setNewItem({
                         ...newItem,
-                        price: parseFloat(e.target.value),
+                        price: parseNumberInput(e.target.value),
                       })
                     }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -1871,7 +1828,7 @@ const POSModule = ({
                         onChange={(e) =>
                           setNewItem({
                             ...newItem,
-                            costPrice: parseFloat(e.target.value),
+                            costPrice: parseNumberInput(e.target.value),
                           })
                         }
                         className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -1943,579 +1900,8 @@ const POSModule = ({
   );
 };
 
-const RoomsModule = ({
-  rooms,
-  bookings,
-  globalPreferences = [],
-  isAdmin,
-  userRole,
-}: {
-  rooms: Room[];
-  bookings: any[];
-  globalPreferences?: any[];
-  isAdmin: boolean;
-  userRole?: string;
-}) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [newRoom, setNewRoom] = useState({
-    number: "",
-    category: "Single",
-    price: 0,
-    status: "Available" as any,
-    breakfastIncluded: true,
-    breakfastPrice: 150,
-    additionalServices: [] as { name: string; price: number }[],
-    description: "",
-    amenities: [] as string[],
-    imageUrl: LOCAL_ASSETS.rooms.single,
-    prefix: "SR",
-  });
-
-  const canManage = canManageRooms(userRole as User["role"] | undefined);
-
-  const handleAddRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const { prefix, number, ...roomData } = newRoom;
-    const finalNumber = prefix + number;
-
-    try {
-      if (editingRoomId) {
-        await updateDoc(doc(db, "rooms", editingRoomId), {
-          ...roomData,
-          number: finalNumber,
-          updated_at: new Date().toISOString(),
-        });
-        setEditingRoomId(null);
-      } else {
-        await addDoc(collection(db, "rooms"), {
-          ...roomData,
-          number: finalNumber,
-          created_at: new Date().toISOString(),
-        });
-      }
-      setIsAdding(false);
-      setNewRoom({
-        number: "",
-        category: "Single",
-        price: 0,
-        status: "Available",
-        breakfastIncluded: true,
-        breakfastPrice: 150,
-        additionalServices: [],
-        description: "",
-        amenities: [],
-        imageUrl: LOCAL_ASSETS.rooms.single,
-        prefix: "SR",
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, "rooms");
-    }
-  };
-
-  const startEdit = (room: Room) => {
-    setEditingRoomId(room.id);
-    setNewRoom({
-      category: room.category,
-      price: room.price,
-      status: room.status,
-      breakfastIncluded: room.breakfastIncluded ?? true,
-      breakfastPrice: room.breakfastPrice ?? 150,
-      additionalServices: room.additionalServices ?? [],
-      description: room.description ?? "",
-      amenities: room.amenities ?? [],
-      imageUrl: room.imageUrl ?? LOCAL_ASSETS.rooms.single,
-      prefix: room.number.match(/^[A-Z]+/)?.[0] || "SR",
-      number: room.number.replace(/^[A-Z]+/, ""),
-    });
-    setIsAdding(true);
-  };
-
-  const deleteRoom = async (roomId: string) => {
-    try {
-      await deleteDoc(doc(db, "rooms", roomId));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, "rooms");
-    }
-  };
-
-  const [activeSubTab, setActiveSubTab] = useState<"rooms" | "bookings">("rooms");
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
-          <h2 className="text-xl md:text-2xl font-serif italic">
-            Room Management
-          </h2>
-          <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit">
-            <button
-              onClick={() => setActiveSubTab("rooms")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "rooms" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
-            >
-              Inventory
-            </button>
-            <button
-              onClick={() => setActiveSubTab("bookings")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "bookings" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
-            >
-              Daily Bookings ({bookings.filter(b => b.status === "Pending").length})
-            </button>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {canManage && activeSubTab === "rooms" && (
-            <button
-              onClick={() => {
-                setEditingRoomId(null);
-                setNewRoom({
-                  number: "",
-                  category: "Single",
-                  price: 0,
-                  status: "Available",
-                  breakfastIncluded: true,
-                  breakfastPrice: 150,
-                  additionalServices: [],
-                  description: "",
-                  amenities: [],
-                  imageUrl: LOCAL_ASSETS.rooms.single,
-                  prefix: "SR"
-                });
-                setIsAdding(true);
-              }}
-              className="px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all text-xs sm:text-sm font-medium whitespace-nowrap flex items-center gap-2"
-            >
-              <Plus size={18} /> Add Individual Room
-            </button>
-          )}
-        </div>
-      </div>
-
-      {activeSubTab === "rooms" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {rooms.map((room) => (
-            <motion.div
-              key={room.id}
-              whileHover={{ y: -4 }}
-              className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-lg transition-all relative group"
-            >
-              <div className="aspect-video mb-4 rounded-xl overflow-hidden bg-gray-100 relative group-hover:shadow-inner">
-                <img 
-                  src={room.imageUrl || LOCAL_ASSETS.rooms.single} 
-                  alt={`Room ${room.number}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  {canManage && (
-                    <>
-                      <button
-                        onClick={() => startEdit(room)}
-                        className="p-2 bg-white text-black rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                        title="Edit Room"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete Room ${room.number}?`)) {
-                            deleteRoom(room.id);
-                          }
-                        }}
-                        className="p-2 bg-white text-red-500 rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                        title="Delete Room"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <span className="px-2.5 py-1 bg-[#141414] text-white rounded-[4px] text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
-                      {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
-                    </span>
-                    <span className="text-[9px] font-mono text-black/30 font-bold uppercase tracking-[0.2em] border-l border-black/10 pl-4">
-                      UNIT REGISTRY
-                    </span>
-                  </div>
-                  <h3 className="text-6xl font-serif font-black tracking-tighter text-[#141414] leading-none mb-1.5">
-                    {room.number.replace(/^[A-Z]+/, "")}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-black/10"></div>
-                    <p className="text-[10px] font-mono text-black/50 font-medium uppercase tracking-[0.2em]">
-                      {room.category} Standard
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-[0.15em]
-                  ${
-                    room.status === "Available"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : room.status === "Occupied"
-                        ? "bg-orange-50 text-orange-700"
-                        : "bg-blue-50 text-blue-700"
-                  }`}
-                >
-                  {room.status}
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-end text-xs pt-4 border-t border-black/[0.03]">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-black/30 font-mono uppercase tracking-widest mb-1">Standard Rate</span>
-                    <span className="text-xl font-serif italic font-medium text-black/80">N$ {room.price}</span>
-                  </div>
-                </div>
-                
-                {room.additionalServices && room.additionalServices.length > 0 && (
-                  <div className="pt-2 border-t border-black/5">
-                    <div className="flex flex-wrap gap-1">
-                      {room.additionalServices.map((s, i) => (
-                        <span key={i} className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100">
-                          {s.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-[10px] text-black/50 line-clamp-2 h-7 italic">
-                  {room.description || "Premium room with modern essentials..."}
-                </p>
-
-                <div className="flex gap-2">
-                  {room.status === "Available" ? (
-                    <button 
-                      onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), { status: "Occupied" });
-                      }}
-                      className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
-                    >
-                      Check In
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), { status: "Available" });
-                      }}
-                      className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
-                    >
-                      Check Out
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-[#F9F9F8] border-b border-black/5">
-                <tr>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Guest</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Room</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Services</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Total Price</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Status</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5">
-                {bookings.filter((b: any) => b.status === "Pending").map((booking: any) => (
-                  <tr key={booking.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-6">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{booking.guest_name}</span>
-                        <span className="text-[10px] text-black/40 font-mono">{booking.guest_email}</span>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-lg bg-black/5 flex items-center justify-center text-[10px] font-mono font-bold text-black/40">
-                          {booking.room_number.match(/^[A-Z]+/)?.[0] || "RM"}
-                        </span>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-serif italic font-medium leading-none">#{booking.room_number.replace(/^[A-Z]+/, "")}</span>
-                          <span className="text-[9px] font-mono text-black/30 uppercase tracking-widest mt-1">Confirmed Unit</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex flex-col gap-1">
-                        {booking.breakfast_included && (
-                          <span className="text-[10px] text-emerald-600 font-mono uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded w-fit">Breakfast</span>
-                        )}
-                        {booking.additional_services?.map((svc: string, i: number) => (
-                          <span key={i} className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit">{svc}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <span className="text-sm font-serif italic font-medium">N$ {booking.total_price}</span>
-                    </td>
-                    <td className="p-6">
-                      <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-mono uppercase animate-pulse">Pending</span>
-                    </td>
-                    <td className="p-6 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={async () => {
-                             await updateDoc(doc(db, "room_bookings", booking.id), { status: "Confirmed" });
-                             // Mock external notification
-                             await createWorkflowNotification({
-                                userId: booking.guest_uid,
-                                title: "Stay Confirmed!",
-                                message: `Your stay in Room ${booking.room_number} is confirmed. A receipt has been sent to your WhatsApp and Email.`,
-                                type: "system"
-                             });
-                          }}
-                          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2"
-                        >
-                          Confirm & Notify
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {bookings.filter((b: any) => b.status === "Pending").length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-12 text-center text-black/20 font-mono text-sm italic">
-                      No pending booking requests.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <AnimatePresence>
-        {isAdding && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-black/5 my-8"
-            >
-              <div className="flex justify-between items-center mb-8 pb-4 border-b border-black/5">
-                <div>
-                  <h3 className="text-2xl font-serif italic text-[#141414]">
-                    {editingRoomId ? `Edit Room ${newRoom.number}` : "Register New Room"}
-                  </h3>
-                  <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
-                    Direct Cloud Synchronization Active
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsAdding(false)}
-                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                >
-                  <X size={24} className="text-black/40" />
-                </button>
-              </div>
-              
-              <form onSubmit={handleAddRoom} className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">Core Setup</label>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Category</label>
-                        <select
-                          value={newRoom.category}
-                          onChange={(e) => {
-                            const cat = e.target.value;
-                            const newPrefix = cat === "Single" ? "SR" : cat === "Double" ? "DR" : cat === "VIP" ? "VR" : "PR";
-                            
-                            setNewRoom({ 
-                              ...newRoom, 
-                              category: cat,
-                              prefix: newPrefix,
-                              imageUrl: cat === "Single" ? LOCAL_ASSETS.rooms.single : cat === "Double" ? LOCAL_ASSETS.rooms.double : LOCAL_ASSETS.rooms.vip
-                            })
-                          }}
-                          className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-2 focus:ring-black/5 outline-none transition-all text-xs"
-                        >
-                          <option value="Single">Single Room (SR)</option>
-                          <option value="Double">Double Room (DR)</option>
-                          <option value="VIP">VIP Suite (VR)</option>
-                          <option value="Suite">Presidential (PR)</option>
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Prefix</label>
-                          <select
-                            value={newRoom.prefix}
-                            onChange={(e) => setNewRoom({ ...newRoom, prefix: e.target.value })}
-                            className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
-                          >
-                            <option value="SR">SR (Single)</option>
-                            <option value="DR">DR (Double)</option>
-                            <option value="VR">VR (VIP)</option>
-                            <option value="PR">PR (Presidential)</option>
-                            <option value="EX">EX (Executive)</option>
-                          </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Room #</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. 001"
-                            value={newRoom.number}
-                            onChange={(e) => setNewRoom({ ...newRoom, number: e.target.value })}
-                            className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">Pricing & Dining</label>
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1 pl-1">Nightly Rate (N$)</label>
-                        <input
-                          type="number"
-                          required
-                          value={newRoom.price}
-                          onChange={(e) => setNewRoom({ ...newRoom, price: parseFloat(e.target.value) })}
-                          className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-medium text-sm"
-                        />
-                      </div>
-                      
-                      <div className="p-4 bg-emerald-500/[0.03] rounded-2xl border border-emerald-500/10">
-                        <div className="flex items-center justify-between mb-2">
-                           <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              id="bf-toggle-edit"
-                              checked={newRoom.breakfastIncluded}
-                              onChange={(e) => setNewRoom({ ...newRoom, breakfastIncluded: e.target.checked })}
-                              className="w-4 h-4 rounded-lg border-emerald-500/20 text-emerald-600 focus:ring-emerald-500/20"
-                            />
-                            <label htmlFor="bf-toggle-edit" className="text-[10px] font-mono uppercase text-emerald-800 font-bold">Standard Breakfast</label>
-                          </div>
-                          {newRoom.breakfastIncluded && (
-                            <span className="text-[10px] font-mono text-emerald-600/60 font-bold">ACTIVE</span>
-                          )}
-                        </div>
-                        {newRoom.breakfastIncluded && (
-                          <div className="flex items-center justify-between pt-2 border-t border-emerald-500/5">
-                            <span className="text-[9px] font-mono text-emerald-700/50 uppercase">Service Price</span>
-                            <input
-                              type="number"
-                              value={newRoom.breakfastPrice}
-                              onChange={(e) => setNewRoom({ ...newRoom, breakfastPrice: parseFloat(e.target.value) })}
-                              className="w-20 p-1 bg-transparent border-b border-emerald-500/10 text-right text-xs font-mono focus:border-emerald-500 outline-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest italic">Inventory Media</label>
-                    <input
-                      type="text"
-                      placeholder="Image URL for the room gallery..."
-                      value={newRoom.imageUrl}
-                      onChange={(e) => setNewRoom({ ...newRoom, imageUrl: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-[9px] text-black/40 font-mono italic"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">Room Description</label>
-                    <textarea 
-                      placeholder="Craft a compelling description..."
-                      value={newRoom.description}
-                      onChange={(e) => setNewRoom({ ...newRoom, description: e.target.value })}
-                      className="w-full h-28 p-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-xs leading-relaxed italic text-black/70 resize-none font-serif"
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center pb-2 border-b border-black/5">
-                      <label className="block text-[10px] font-mono uppercase text-black/40 font-bold tracking-widest">Premium Metadata</label>
-                      <select 
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            const [name, price] = val.split("|");
-                            if (!newRoom.additionalServices.find(s => s.name === name)) {
-                              setNewRoom({
-                                ...newRoom,
-                                additionalServices: [...newRoom.additionalServices, { name, price: parseFloat(price) }]
-                              });
-                            }
-                          }
-                          e.target.value = "";
-                        }}
-                        className="text-[9px] font-mono uppercase bg-black text-white px-3 py-1.5 rounded-lg outline-none cursor-pointer tracking-tighter"
-                      >
-                        <option value="">+ Add Service</option>
-                         {(globalPreferences || []).map(pref => (
-                            <option key={pref.id} value={`${pref.name}|${pref.price}`}>
-                              {pref.name} (N$ {pref.price})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2">
-                       {newRoom.additionalServices.map((s, i) => (
-                        <div key={i} className="flex items-center justify-between px-4 py-2.5 bg-black/[0.02] border border-black/5 rounded-xl text-[10px] font-mono group hover:bg-black hover:text-white transition-all cursor-default">
-                          <span className="font-bold tracking-tight">{s.name}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="opacity-40">N$ {s.price}</span>
-                            <button
-                              type="button"
-                              onClick={() => setNewRoom({ ...newRoom, additionalServices: newRoom.additionalServices.filter((_, idx) => idx !== i) })}
-                              className="text-red-500/40 group-hover:text-white transition-colors"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      className="w-full py-5 bg-black text-white rounded-2xl font-medium shadow-2xl shadow-black/20 hover:scale-[1.01] active:scale-95 transition-all text-xs uppercase tracking-[0.3em] font-mono"
-                    >
-                      {editingRoomId ? "Update Live Registry" : "Commit to Database"}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
+// --- Modules ---
+// RoomsModule moved to features/rooms/components/RoomsModule.tsx
 
 const LaundryModule = ({
   orders,
@@ -3010,7 +2396,7 @@ const LaundryModule = ({
                     onChange={(e) =>
                       setNewOrder({
                         ...newOrder,
-                        total_price: parseFloat(e.target.value),
+                        total_price: parseNumberInput(e.target.value),
                       })
                     }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -3072,7 +2458,7 @@ const LaundryModule = ({
                     onChange={(e) =>
                       setNewService({
                         ...newService,
-                        price: parseFloat(e.target.value),
+                        price: parseNumberInput(e.target.value),
                       })
                     }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -3190,7 +2576,7 @@ const ConferenceModule = ({
         end_time: endTime.toISOString(),
         services: newBooking.selectedServices,
         total_price: totalPrice,
-        status: "Confirmed",
+        status: "Pending",
       });
 
       // Notify staff
@@ -3656,7 +3042,7 @@ const ConferenceModule = ({
                     onChange={(e) =>
                       setNewRoom({
                         ...newRoom,
-                        price_per_hour: parseFloat(e.target.value),
+                        price_per_hour: parseNumberInput(e.target.value),
                       })
                     }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -3718,7 +3104,7 @@ const ConferenceModule = ({
                     onChange={(e) =>
                       setNewService({
                         ...newService,
-                        price: parseFloat(e.target.value),
+                        price: parseNumberInput(e.target.value),
                       })
                     }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:outline-none"
@@ -4001,8 +3387,8 @@ const StaffModule = ({ users }: { users: User[] }) => {
 
 const CustomerPortal = ({
   user,
-  notifications: globalNotifications,
-  markNotificationAsRead,
+  notifications: globalHotelNotifications,
+  markHotelNotificationAsRead,
   createNotification,
   rooms,
   menu,
@@ -4013,10 +3399,11 @@ const CustomerPortal = ({
   myLaundryOrders,
   myRoomBookings,
   myConferenceBookings,
+  globalPreferences,
 }: {
   user: User;
-  notifications: Notification[];
-  markNotificationAsRead: (id: string) => Promise<void>;
+  notifications: HotelNotification[];
+  markHotelNotificationAsRead: (id: string) => Promise<void>;
   createNotification: (notif: any) => Promise<void>;
   rooms: Room[];
   menu: MenuItem[];
@@ -4027,6 +3414,7 @@ const CustomerPortal = ({
   myLaundryOrders: LaundryOrder[];
   myRoomBookings: any[];
   myConferenceBookings: any[];
+  globalPreferences?: any[];
 }) => {
   const HERO_SLIDE_INTERVAL_MS = 4000;
   const HERO_TRANSITION_SECONDS = 0.55;
@@ -4037,7 +3425,7 @@ const CustomerPortal = ({
   const [includeBreakfast, setIncludeBreakfast] = useState(false);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [showHotelNotifications, setShowHotelNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<
     { id: string; message: string; type: "info" | "success" | "error" }[]
@@ -4115,14 +3503,18 @@ const CustomerPortal = ({
         created_at: new Date().toISOString(),
       });
 
-      // Notify staff
-      await createNotification({
-        role: item.type === "Restaurant" ? "Waiter" : "Barman",
-        title: `New ${item.type} Order`,
-        message: `New order from ${user.name} for ${item.name}`,
-        type: "order",
-        orderId: orderRef.id,
-      });
+      // Notify staff when rules permit it, but do not fail the customer action if the notification write is rejected.
+      try {
+        await createNotification({
+          role: item.type === "Restaurant" ? "Waiter" : "Barman",
+          title: `New ${item.type} Order`,
+          message: `New order from ${user.name} for ${item.name}`,
+          type: "order",
+          orderId: orderRef.id,
+        });
+      } catch (notificationError) {
+        console.warn("Order notification failed:", notificationError);
+      }
 
       addToast("Order placed successfully!", "success");
     } catch (err) {
@@ -4131,45 +3523,57 @@ const CustomerPortal = ({
     }
   };
 
-  const handleRoomCheckIn = async (room: Room) => {
+  const handleRoomCheckIn = async (
+    room: Room,
+    options: { includeBreakfast: boolean; selectedAddons: string[] },
+  ) => {
+    console.log("Check-in attempt by:", user?.id, "isAuthenticated:", !!user);
     try {
-      const finalPrice = room.price + 
-        (includeBreakfast ? (room.breakfastPrice || 0) : 0) + 
-        (room.additionalServices || []).filter(s => selectedAddons.includes(s.name)).reduce((sum, s) => sum + s.price, 0);
+      const addonFromRoom = (room.additionalServices || [])
+        .filter((s) => options.selectedAddons.includes(s.name))
+        .reduce((sum, s) => sum + s.price, 0);
+      const addonFromGlobal = (globalPreferences || [])
+        .filter((s) => options.selectedAddons.includes(s.name))
+        .reduce((sum, s) => sum + s.price, 0);
+      const finalPrice =
+        room.price +
+        (options.includeBreakfast ? room.breakfastPrice || 0 : 0) +
+        addonFromRoom +
+        addonFromGlobal;
 
-      const bookingRef = await addDoc(collection(db, "room_bookings"), {
+      await addDoc(collection(db, "room_bookings"), {
         room_id: room.id,
         room_number: room.number,
         guest_uid: user.id,
         guest_name: user.name,
         guest_email: user.email,
         total_price: finalPrice,
-        breakfast_included: includeBreakfast,
-        additional_services: selectedAddons,
+        breakfast_included: options.includeBreakfast,
+        additional_services: options.selectedAddons,
         status: "Pending",
-        check_in_date: new Date().toISOString(),
+        check_in: new Date().toISOString(),
+        check_out: new Date(new Date().getTime() + 86400000).toISOString(),
         created_at: new Date().toISOString(),
       });
 
-      // Update room status
-      await updateDoc(doc(db, "rooms", room.id), {
-        status: "Occupied"
-      });
+      // Notify receptionist when rules permit it, but keep the booking successful even if the notification write is rejected.
+      try {
+        await createNotification({
+          role: "Receptionist",
+          title: "New Check-In Request",
+          message: `${user.name} checked into Room ${room.number} with ${options.includeBreakfast ? "breakfast" : "no breakfast"}${options.selectedAddons.length > 0 ? " and extra services" : ""}`,
+          type: "system",
+          targetTab: "rooms",
+        });
+      } catch (notificationError) {
+        console.warn("Check-in notification failed:", notificationError);
+      }
 
-      // Notify receptionist
-      await createNotification({
-        role: "Receptionist",
-        title: "New Check-In Request",
-        message: `${user.name} checked into Room ${room.number} with ${includeBreakfast ? 'breakfast' : 'no breakfast'}${selectedAddons.length > 0 ? ' and extra services' : ''}`,
-        type: "system",
-        orderId: bookingRef.id,
-        targetTab: "rooms"
-      });
-
-      addToast("Check-in successful! Total: N$ " + finalPrice, "success");
+      addToast(
+        "Check-in request submitted! Total: N$ " + finalPrice,
+        "success",
+      );
       setSelectedRoom(null);
-      setIncludeBreakfast(false);
-      setSelectedAddons([]);
     } catch (err) {
       console.error(err);
       addToast("Check-in failed", "error");
@@ -4188,14 +3592,18 @@ const CustomerPortal = ({
         created_at: new Date().toISOString(),
       });
 
-      // Notify staff
-      await createNotification({
-        role: "Receptionist",
-        title: "New Laundry Request",
-        message: `New laundry request from ${user.name}`,
-        type: "laundry",
-        orderId: orderRef.id,
-      });
+      // Notify staff when rules permit it, but do not fail the customer action if the notification write is rejected.
+      try {
+        await createNotification({
+          role: "Receptionist",
+          title: "New Laundry Request",
+          message: `New laundry request from ${user.name}`,
+          type: "laundry",
+          orderId: orderRef.id,
+        });
+      } catch (notificationError) {
+        console.warn("Laundry notification failed:", notificationError);
+      }
 
       addToast("Laundry request sent!", "success");
     } catch (err) {
@@ -4239,7 +3647,7 @@ const CustomerPortal = ({
 
         setToasts((prev) => [...prev, { id, message, type: "success" }]);
 
-        // Push Notification
+        // Push HotelNotification
         NotificationService.notify("Order Update", {
           body: message,
           tag: order.id,
@@ -4277,7 +3685,7 @@ const CustomerPortal = ({
 
   return (
     <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-      {/* Notifications Overlay */}
+      {/* HotelNotifications Overlay */}
       <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
         <AnimatePresence>
           {toasts.map((n) => (
@@ -4324,22 +3732,24 @@ const CustomerPortal = ({
           <div className="flex items-center gap-4">
             <div className="relative">
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() =>
+                  setShowHotelNotifications(!showHotelNotifications)
+                }
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
               >
                 <Bell size={20} className="text-black/60" />
-                {globalNotifications.filter((n) => !n.read).length > 0 && (
+                {globalHotelNotifications.filter((n) => !n.read).length > 0 && (
                   <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
                 )}
               </button>
 
               <AnimatePresence>
-                {showNotifications && (
+                {showHotelNotifications && (
                   <div className="absolute right-0 mt-2 w-80 z-50">
                     <NotificationCenterPanel
-                      notifications={globalNotifications}
-                      onClose={() => setShowNotifications(false)}
-                      onMarkAsRead={markNotificationAsRead}
+                      notifications={globalHotelNotifications}
+                      onClose={() => setShowHotelNotifications(false)}
+                      onMarkAsRead={markHotelNotificationAsRead}
                       onNavigate={(type, title) => {
                         if (type === "order") setActiveTab("orders");
                         if (type === "laundry") setActiveTab("laundry");
@@ -4603,54 +4013,60 @@ const CustomerPortal = ({
                       View All Rooms <ChevronRight size={14} />
                     </button>
                   </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                      {rooms.slice(0, 3).map((room) => (
-                        <div
-                          key={room.id}
-                          onClick={() => {
-                            setSelectedRoom(room);
-                            setActiveTab("rooms");
-                          }}
-                          className="group cursor-pointer bg-white rounded-3xl p-4 border border-black/5 shadow-sm hover:shadow-xl transition-all"
-                        >
-                          <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-6 relative shadow-md bg-black">
-                            <img
-                              src={getRoomImage(room)}
-                              alt={room.category}
-                              className="w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute inset-0 flex flex-col justify-end p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="px-3 py-1 bg-white text-black font-black rounded text-[9px] font-mono uppercase tracking-[0.3em]">
-                                    {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
-                                  </span>
-                                  <span className="text-[9px] text-white/40 font-mono uppercase tracking-widest border-l border-white/20 pl-3">REGISTRY</span>
-                                </div>
-                                <p className="text-white text-7xl font-serif font-black tracking-tighter leading-none">
-                                  {room.number.replace(/^[A-Z]+/, "")}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-center px-1">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {rooms.slice(0, 3).map((room) => (
+                      <div
+                        key={room.id}
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setActiveTab("rooms");
+                        }}
+                        className="group cursor-pointer bg-white rounded-3xl p-4 border border-black/5 shadow-sm hover:shadow-xl transition-all"
+                      >
+                        <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-6 relative shadow-md bg-black">
+                          <img
+                            src={getRoomImage(room)}
+                            alt={room.category}
+                            className="w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 flex flex-col justify-end p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent">
                             <div className="flex flex-col">
-                              <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">Standard Suite</span>
-                              <h4 className="text-base font-serif font-bold text-[#141414] tracking-tight italic">
-                                Registry Unit {room.number}
-                              </h4>
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">Stay Value</span>
-                              <p className="text-lg font-serif font-black text-[#141414]">
-                                N$ {room.price}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="px-3 py-1 bg-white text-black font-black rounded text-[9px] font-mono uppercase tracking-[0.3em]">
+                                  {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
+                                </span>
+                                <span className="text-[9px] text-white/40 font-mono uppercase tracking-widest border-l border-white/20 pl-3">
+                                  REGISTRY
+                                </span>
+                              </div>
+                              <p className="text-white text-7xl font-serif font-black tracking-tighter leading-none">
+                                {room.number.replace(/^[A-Z]+/, "")}
                               </p>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                        <div className="flex justify-between items-center px-1">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">
+                              Standard Suite
+                            </span>
+                            <h4 className="text-base font-serif font-bold text-[#141414] tracking-tight italic">
+                              Registry Unit {room.number}
+                            </h4>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">
+                              Stay Value
+                            </span>
+                            <p className="text-lg font-serif font-black text-[#141414]">
+                              N$ {room.price}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -4703,7 +4119,9 @@ const CustomerPortal = ({
                               <span className="px-2 py-0.5 bg-black/[0.04] border border-black/5 rounded-[4px] text-[8px] font-mono text-black/40 font-bold uppercase tracking-widest shadow-inner">
                                 {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
                               </span>
-                              <span className="text-[10px] font-mono text-black/20 font-medium uppercase tracking-[0.2em] border-l border-black/5 pl-2">UNIT REGISTRY</span>
+                              <span className="text-[10px] font-mono text-black/20 font-medium uppercase tracking-[0.2em] border-l border-black/5 pl-2">
+                                UNIT REGISTRY
+                              </span>
                             </div>
                             <h3 className="text-4xl font-serif font-black tracking-tight text-[#141414] leading-none mb-1">
                               {room.number.replace(/^[A-Z]+/, "")}
@@ -5022,160 +4440,13 @@ const CustomerPortal = ({
 
         <AnimatePresence>
           {selectedRoom && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-white rounded-3xl overflow-hidden shadow-2xl w-full max-w-2xl border border-black/5 flex flex-col md:flex-row max-h-[90vh]"
-              >
-                <div className="md:w-1/2 md:h-auto aspect-square md:aspect-auto relative bg-gray-100">
-                  <img
-                    src={getRoomImage(selectedRoom)}
-                    alt={`Room ${selectedRoom.number}`}
-                    className="w-full h-full object-cover absolute inset-0"
-                    referrerPolicy="no-referrer"
-                  />
-                  <button
-                    onClick={() => setSelectedRoom(null)}
-                    className="absolute top-4 left-4 p-2 bg-white/90 backdrop-blur-sm rounded-full text-black hover:bg-white transition-colors md:hidden"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <div className="md:w-1/2 p-8 flex flex-col overflow-y-auto">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="px-3 py-1 bg-black text-white rounded-[4px] text-[10px] font-mono font-bold uppercase tracking-[0.3em] leading-none shadow-xl">
-                              {selectedRoom.number.match(/^[A-Z]+/)?.[0] || "RM"}
-                            </span>
-                            <span className="text-[12px] font-mono text-black/30 font-medium uppercase tracking-[0.25em] border-l border-black/10 pl-4">
-                              {selectedRoom.category} REGISTRY
-                            </span>
-                          </div>
-                          <h3 className="text-8xl font-serif font-black tracking-tighter text-[#141414] leading-none">
-                            {selectedRoom.number.replace(/^[A-Z]+/, "")}
-                          </h3>
-                        </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedRoom(null)}
-                      className="hidden md:block p-2 text-black/20 hover:text-black transition-colors"
-                    >
-                      <X size={24} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-6 flex-1">
-                    <div>
-                      <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40 mb-2">
-                        Description
-                      </h4>
-                      <p className="text-sm text-black/70 leading-relaxed">
-                        {selectedRoom.description ||
-                          "Experience comfort and style in our carefully curated rooms."}
-                      </p>
-                    </div>
-
-                    {selectedRoom.amenities &&
-                      selectedRoom.amenities.length > 0 && (
-                        <div>
-                          <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40 mb-2">
-                            Amenities
-                          </h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {selectedRoom.amenities.map((amenity, i) => (
-                              <div
-                                key={i}
-                                className="flex items-center gap-2 text-xs text-black/60"
-                              >
-                                <CheckCircle2
-                                  size={12}
-                                  className="text-emerald-500"
-                                />
-                                <span>{amenity}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="pt-6 border-t border-black/5 mt-auto space-y-6">
-                        {(selectedRoom.breakfastPrice !== undefined || (selectedRoom.additionalServices && selectedRoom.additionalServices.length > 0)) && (
-                          <div className="space-y-4 bg-gray-50 p-4 rounded-2xl">
-                            <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40">Optional Services</h4>
-                            {selectedRoom.breakfastPrice !== undefined && selectedRoom.breakfastPrice > 0 && (
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <input 
-                                    type="checkbox" 
-                                    id="breakfastOpt" 
-                                    checked={includeBreakfast} 
-                                    onChange={(e) => setIncludeBreakfast(e.target.checked)}
-                                    className="rounded border-black/10" 
-                                  />
-                                  <label htmlFor="breakfastOpt" className="text-xs font-medium">Add Daily Breakfast</label>
-                                </div>
-                                <span className="text-xs font-serif italic text-black/60">+ N$ {selectedRoom.breakfastPrice}</span>
-                              </div>
-                            )}
-                            {selectedRoom.additionalServices && selectedRoom.additionalServices.map((s, i) => (
-                              <div key={i} className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <input 
-                                    type="checkbox" 
-                                    id={`addon-${i}`} 
-                                    checked={selectedAddons.includes(s.name)} 
-                                    onChange={(e) => {
-                                      if (e.target.checked) setSelectedAddons([...selectedAddons, s.name]);
-                                      else setSelectedAddons(selectedAddons.filter(a => a !== s.name));
-                                    }}
-                                    className="rounded border-black/10" 
-                                  />
-                                  <label htmlFor={`addon-${i}`} className="text-xs font-medium">{s.name}</label>
-                                </div>
-                                <span className="text-xs font-serif italic text-black/60">+ N$ {s.price}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex justify-between items-end">
-                          <div>
-                            <p className="text-[10px] font-mono uppercase text-black/40">
-                              Total Stay Value
-                            </p>
-                            <p className="text-2xl font-serif italic">
-                              N$ {selectedRoom.price + 
-                                (includeBreakfast ? (selectedRoom.breakfastPrice || 0) : 0) + 
-                                (selectedRoom.additionalServices || []).filter(s => selectedAddons.includes(s.name)).reduce((sum, s) => sum + s.price, 0)}
-                            </p>
-                          </div>
-                          <div
-                            className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase ${
-                              selectedRoom.status === "Available"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-orange-50 text-orange-700"
-                            }`}
-                          >
-                            {selectedRoom.status}
-                          </div>
-                        </div>
-                        <button
-                          disabled={selectedRoom.status !== "Available"}
-                          onClick={() => handleRoomCheckIn(selectedRoom)}
-                          className="w-full py-4 bg-black text-white rounded-2xl font-medium disabled:opacity-30 hover:bg-black/90 transition-all shadow-xl shadow-black/10"
-                        >
-                          {selectedRoom.status === "Available"
-                            ? "Check In Now"
-                            : "Currently Unavailable"}
-                        </button>
-                      </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+            <RoomDetailsModal
+              selectedRoom={selectedRoom}
+              onClose={() => setSelectedRoom(null)}
+              onCheckIn={handleRoomCheckIn}
+              globalPreferences={globalPreferences}
+              getRoomImage={getRoomImage}
+            />
           )}
         </AnimatePresence>
       </div>
@@ -5186,11 +4457,31 @@ const CustomerPortal = ({
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [toasts, setToasts] = useState<
+    { id: string; message: string; type: "success" | "error" | "info" }[]
+  >([]);
+
+  const addToast = (
+    message: string,
+    type: "success" | "error" | "info" = "info",
+  ) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  };
+
   const [activeTab, setActiveTab] = useState(() =>
     getRouteHashTab("staff", STAFF_ROUTE_TABS, "dashboard"),
   );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
+
+  // Push notifications: initialize and manage token lifecycle
+  // Reads VAPID key from VITE_FIREBASE_VAPID_KEY if provided at build time
+  usePushNotifications(process.env.VITE_FIREBASE_VAPID_KEY);
+
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [laundry, setLaundry] = useState<LaundryOrder[]>([]);
@@ -5201,8 +4492,10 @@ export default function App() {
   const [conferenceServices, setConferenceServices] = useState<any[]>([]);
   const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
   const [globalPreferences, setGlobalPreferences] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setHotelNotifications] = useState<HotelNotification[]>(
+    [],
+  );
+  const [showHotelNotifications, setShowHotelNotifications] = useState(false);
   const lastOrdersCount = useRef<number | null>(null);
   const lastLaundryCount = useRef<number | null>(null);
   const lastBookingCount = useRef<number | null>(null);
@@ -5288,16 +4581,17 @@ export default function App() {
         );
         setOrders(newOrders);
 
-        // Notify staff of new incoming orders
+        // FRONTEND-ONLY TRIGGER: Notify staff of new incoming orders locally
         if (
           lastOrdersCount.current !== null &&
           newOrders.length > lastOrdersCount.current
         ) {
-          const latest = newOrders.sort(
+          const latest = [...newOrders].sort(
             (a, b) =>
               new Date(b.created_at).getTime() -
               new Date(a.created_at).getTime(),
           )[0];
+
           if (latest && latest.status === "Pending") {
             const isRelevant = canReceiveOrderNotifications(
               latest.type,
@@ -5305,10 +4599,19 @@ export default function App() {
             );
 
             if (isRelevant) {
-              NotificationService.notify(`New ${latest.type} Order`, {
-                body: `Table ${latest.table_number || "N/A"} placed a new order.`,
-                tag: "new-order",
-              });
+              // Trigger local UI Toast
+              addToast(`New ${latest.type} Order Received!`, "info");
+
+              // Trigger Browser-level notification (if permission granted)
+              if (
+                window.Notification &&
+                window.Notification.permission === "granted"
+              ) {
+                new window.Notification(`New ${latest.type} Order`, {
+                  body: `Table ${latest.table_number || "N/A"} placed an order for N$ ${latest.total_price}`,
+                  icon: "/assets/images/logo/pahukeni_logo.png",
+                });
+              }
             }
           }
         }
@@ -5461,14 +4764,10 @@ export default function App() {
       q,
       (snapshot) => {
         const personalNotifs = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as Notification,
+          (doc) => ({ id: doc.id, ...doc.data() }) as HotelNotification,
         );
-        setNotifications((prev) => {
-          const combined = [...prev, ...personalNotifs];
-          // Deduplicate by ID and sort
-          const unique = Array.from(
-            new Map(combined.map((item) => [item.id, item])).values(),
-          );
+        setHotelNotifications((prev) => {
+          const unique = dedupeById([...prev, ...personalNotifs]);
 
           // Trigger browser notification for new unread ones
           personalNotifs
@@ -5492,7 +4791,7 @@ export default function App() {
       },
       (error) => {
         // If query fails (e.g. index missing), fallback to non-filtered or just log
-        console.warn("Notification listener failed:", error);
+        console.warn("HotelNotification listener failed:", error);
       },
     );
 
@@ -5506,14 +4805,10 @@ export default function App() {
       qRole,
       (snapshot) => {
         const roleNotifs = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as Notification,
+          (doc) => ({ id: doc.id, ...doc.data() }) as HotelNotification,
         );
-        setNotifications((prev) => {
-          const combined = [...prev, ...roleNotifs];
-          // Deduplicate by ID and sort
-          const unique = Array.from(
-            new Map(combined.map((item) => [item.id, item])).values(),
-          );
+        setHotelNotifications((prev) => {
+          const unique = dedupeById([...prev, ...roleNotifs]);
 
           // Trigger browser notification for new unread ones
           roleNotifs
@@ -5544,9 +4839,12 @@ export default function App() {
     const unsubPrefs = onSnapshot(
       collection(db, "global_preferences"),
       (snapshot) => {
-        setGlobalPreferences(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setGlobalPreferences(
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+        );
       },
-      (error) => handleFirestoreError(error, OperationType.GET, "global_preferences")
+      (error) =>
+        handleFirestoreError(error, OperationType.GET, "global_preferences"),
     );
 
     return () => {
@@ -5630,16 +4928,19 @@ export default function App() {
   }, [authReady, menu, rooms, user]);
 
   const createNotification = async (
-    notif: Omit<Notification, "id" | "read" | "created_at">,
+    notif: Omit<HotelNotification, "id" | "read" | "created_at">,
   ) => {
     try {
-      await createWorkflowNotification(notif);
+      await createWorkflowNotification(notif, {
+        showToast: (msg, type) => addToast(msg, type || "info"),
+      });
     } catch (err) {
       console.error("Failed to create notification:", err);
+      addToast("Failed to send notification", "error");
     }
   };
 
-  const markNotificationAsRead = async (id: string) => {
+  const markHotelNotificationAsRead = async (id: string) => {
     try {
       await markNotificationRead(id);
     } catch (err) {
@@ -5871,7 +5172,7 @@ export default function App() {
       <CustomerPortal
         user={user}
         notifications={notifications}
-        markNotificationAsRead={markNotificationAsRead}
+        markHotelNotificationAsRead={markHotelNotificationAsRead}
         createNotification={createNotification}
         rooms={rooms}
         menu={menu}
@@ -5882,6 +5183,7 @@ export default function App() {
         myLaundryOrders={laundry}
         myRoomBookings={bookings}
         myConferenceBookings={conferenceBookings}
+        globalPreferences={globalPreferences}
       />
     );
   }
@@ -5932,255 +5234,308 @@ export default function App() {
   );
 
   return (
-    <AppErrorBoundary>
-      <div className="min-h-screen bg-[#E4E3E0] flex flex-col lg:flex-row">
-        {/* Mobile Header */}
-        <div className="lg:hidden bg-[#141414] text-white p-4 flex items-center justify-between sticky top-0 z-50">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-              <Bed size={16} />
-            </div>
-            <div>
-              <h1 className="text-lg font-serif italic leading-none">
-                Pahukeni
-              </h1>
-              <p className="text-[8px] font-mono text-white/40 uppercase tracking-widest">
-                Pension Hotel
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-
-        {/* Sidebar Overlay */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Sidebar */}
-        <aside
-          className={`
-          fixed inset-y-0 left-0 w-72 bg-[#141414] text-white flex flex-col z-50 transition-transform duration-300 lg:relative lg:translate-x-0
-          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
-        >
-          <div className="p-8 hidden lg:block">
-            <h1 className="text-2xl font-serif italic mb-1">Pahukeni</h1>
-            <p className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em]">
-              Pension Hotel
-            </p>
-          </div>
-
-          <nav className="flex-1 px-4 space-y-2 mt-8 lg:mt-0">
-            {filteredMenuItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setIsSidebarOpen(false);
-                }}
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group
-                  ${activeTab === item.id ? "bg-white/10 text-white" : "text-white/40 hover:text-white hover:bg-white/5"}`}
-              >
-                <item.icon
-                  size={18}
-                  className={
-                    activeTab === item.id
-                      ? "text-white"
-                      : "text-white/40 group-hover:text-white"
-                  }
+    <>
+      <AppErrorBoundary>
+        <div className="min-h-screen bg-[#E4E3E0] flex flex-col lg:flex-row">
+          {/* Mobile Header */}
+          <div className="lg:hidden bg-[#141414] text-white p-4 flex items-center justify-between sticky top-0 z-50 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center p-1.5">
+                <img
+                  src={IMAGE_CATALOG.logo}
+                  alt="Pahukeni Logo"
+                  className="w-full h-full object-contain rounded"
                 />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="p-4 mt-auto">
-            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                  <Users size={14} />
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-xs font-medium truncate">
-                    {user?.name || "Administrator"}
-                  </p>
-                  <p className="text-[10px] font-mono text-white/30 uppercase">
-                    {user?.role || "Admin"}
-                  </p>
-                </div>
+              </div>
+              <div>
+                <h1 className="text-lg font-serif italic leading-none">
+                  Pahukeni
+                </h1>
+                <p className="text-[8px] font-mono text-white/40 uppercase tracking-widest mt-1">
+                  Pension Hotel
+                </p>
               </div>
             </div>
             <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
-              <LogOut size={18} />
-              <span className="text-sm font-medium">Logout</span>
+              {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
-        </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto">
-          <div className="max-w-7xl mx-auto w-full">
-            <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 md:mb-12 gap-4">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-serif italic text-[#141414] capitalize">
-                  {activeTab}
-                </h2>
-                <p className="text-[10px] md:text-xs font-mono text-black/40 uppercase tracking-widest mt-1">
-                  {new Date().toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
-              </div>
+          {/* Sidebar Overlay */}
+          <AnimatePresence>
+            {isSidebarOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+              />
+            )}
+          </AnimatePresence>
 
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="p-2 hover:bg-black/5 rounded-xl transition-colors relative"
-                  >
-                    <Bell size={20} className="text-[#141414]" />
-                    {notifications.filter((n) => !n.read).length > 0 && (
-                      <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#E4E3E0]"></span>
-                    )}
-                  </button>
-
-                  <AnimatePresence>
-                    {showNotifications && (
-                      <div className="absolute right-0 mt-2 w-80 z-50">
-                        <NotificationCenterPanel
-                          notifications={notifications}
-                          onClose={() => setShowNotifications(false)}
-                          onMarkAsRead={markNotificationAsRead}
-                          onNavigate={(type, title) => {
-                            if (type === "order") {
-                              if (title?.toLowerCase().includes("bar"))
-                                setActiveTab("bar");
-                              else setActiveTab("restaurant");
-                            }
-                            if (type === "laundry") setActiveTab("laundry");
-                            if (type === "conference")
-                              setActiveTab("conference");
-                          }}
-                        />
-                      </div>
-                    )}
-                  </AnimatePresence>
+          {/* Sidebar */}
+          <aside
+            className={`
+          fixed inset-y-0 left-0 w-72 bg-[#141414] text-white flex flex-col z-50 transition-transform duration-300 lg:relative lg:translate-x-0
+          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+          >
+            <div className="p-8 hidden lg:block">
+              <div className="flex items-center gap-4 mb-2">
+                <img
+                  src={IMAGE_CATALOG.logo}
+                  alt="Pahukeni Logo"
+                  className="w-10 h-10 rounded-xl"
+                />
+                <div>
+                  <h1 className="text-2xl font-serif italic leading-none">
+                    Pahukeni
+                  </h1>
+                  <p className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em] mt-1">
+                    Pension Hotel
+                  </p>
                 </div>
               </div>
-            </header>
+            </div>
 
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
+            <nav className="flex-1 px-4 space-y-2 mt-8 lg:mt-0">
+              {filteredMenuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group
+                  ${activeTab === item.id ? "bg-white/10 text-white" : "text-white/40 hover:text-white hover:bg-white/5"}`}
+                >
+                  <item.icon
+                    size={18}
+                    className={
+                      activeTab === item.id
+                        ? "text-white"
+                        : "text-white/40 group-hover:text-white"
+                    }
+                  />
+                  <span className="text-sm font-medium">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+
+            <div className="p-4 mt-auto">
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                    <Users size={14} />
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-xs font-medium truncate">
+                      {user?.name || "Administrator"}
+                    </p>
+                    <p className="text-[10px] font-mono text-white/30 uppercase">
+                      {user?.role || "Admin"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
               >
-                {activeTab === "dashboard" && (
-                  <>
-                    <DashboardPage stats={stats} bookings={bookings} />
-                    {isAdmin(user?.role) && rooms.length === 0 && (
-                      <div className="mt-8 p-6 bg-white rounded-2xl border border-dashed border-black/20 text-center">
-                        <p className="text-sm text-black/40 mb-4">
-                          Database appears empty. Initialize with sample data?
+                <LogOut size={18} />
+                <span className="text-sm font-medium">Logout</span>
+              </button>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto">
+            <div className="max-w-7xl mx-auto w-full">
+              <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 md:mb-12 gap-4">
+                <div>
+                  <h2 className="text-2xl md:text-3xl font-serif italic text-[#141414] capitalize">
+                    {activeTab}
+                  </h2>
+                  <p className="text-[10px] md:text-xs font-mono text-black/40 uppercase tracking-widest mt-1">
+                    {new Date().toLocaleDateString("en-US", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <button
+                      onClick={() =>
+                        setShowHotelNotifications(!showHotelNotifications)
+                      }
+                      className="p-2 hover:bg-black/5 rounded-xl transition-colors relative"
+                    >
+                      <Bell size={20} className="text-[#141414]" />
+                      {notifications.filter((n) => !n.read).length > 0 && (
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#E4E3E0]"></span>
+                      )}
+                    </button>
+
+                    <AnimatePresence>
+                      {showHotelNotifications && (
+                        <div className="absolute right-0 mt-2 w-80 z-50">
+                          <NotificationCenterPanel
+                            notifications={notifications}
+                            onClose={() => setShowHotelNotifications(false)}
+                            onMarkAsRead={markHotelNotificationAsRead}
+                            onNavigate={(type, title) => {
+                              if (type === "order") {
+                                if (title?.toLowerCase().includes("bar"))
+                                  setActiveTab("bar");
+                                else setActiveTab("restaurant");
+                              }
+                              if (type === "laundry") setActiveTab("laundry");
+                              if (type === "conference")
+                                setActiveTab("conference");
+                            }}
+                          />
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </header>
+
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {activeTab === "dashboard" && (
+                    <>
+                      <DashboardPage stats={stats} bookings={bookings} />
+                      {isAdmin(user?.role) && rooms.length === 0 && (
+                        <div className="mt-8 p-6 bg-white rounded-2xl border border-dashed border-black/20 text-center">
+                          <p className="text-sm text-black/40 mb-4">
+                            Database appears empty. Initialize with sample data?
+                          </p>
+                          <button
+                            onClick={seedData}
+                            className="px-6 py-2 bg-black text-white rounded-xl text-xs font-mono uppercase tracking-widest"
+                          >
+                            Seed Database
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {activeTab === "rooms" && (
+                    <RoomsModule
+                      rooms={rooms}
+                      bookings={bookings}
+                      globalPreferences={globalPreferences}
+                      isAdmin={isAdmin(user?.role)}
+                      userRole={user?.role}
+                    />
+                  )}
+                  {activeTab === "staff" && <StaffModule users={users} />}
+                  {(activeTab === "restaurant" || activeTab === "bar") && (
+                    <POSModule
+                      type={activeTab === "restaurant" ? "Restaurant" : "Bar"}
+                      menu={menu}
+                      orders={orders}
+                      isAdmin={isAdmin(user?.role)}
+                      userRole={user?.role}
+                      user={user!}
+                      createNotification={createNotification}
+                    />
+                  )}
+                  {activeTab === "laundry" && (
+                    <LaundryModule
+                      orders={laundry}
+                      services={laundryServices}
+                      isAdmin={isAdmin(user?.role)}
+                      userRole={user?.role}
+                      user={user!}
+                      createNotification={createNotification}
+                    />
+                  )}
+                  {activeTab === "conference" && (
+                    <ConferenceModule
+                      rooms={conferenceRooms}
+                      services={conferenceServices}
+                      bookings={conferenceBookings}
+                      isAdmin={isAdmin(user?.role)}
+                      userRole={user?.role}
+                      user={user!}
+                      createNotification={createNotification}
+                    />
+                  )}
+                  {activeTab !== "dashboard" &&
+                    activeTab !== "restaurant" &&
+                    activeTab !== "bar" &&
+                    activeTab !== "staff" &&
+                    activeTab !== "laundry" &&
+                    activeTab !== "conference" &&
+                    activeTab !== "rooms" && (
+                      <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
+                        <AlertCircle size={48} className="text-black/10 mb-4" />
+                        <h3 className="text-xl font-serif italic mb-2">
+                          {activeTab} Module
+                        </h3>
+                        <p className="text-sm text-black/40 max-w-md">
+                          This module is currently being populated with live
+                          data. Please check back shortly or use the Dashboard
+                          for an overview.
                         </p>
-                        <button
-                          onClick={seedData}
-                          className="px-6 py-2 bg-black text-white rounded-xl text-xs font-mono uppercase tracking-widest"
-                        >
-                          Seed Database
-                        </button>
                       </div>
                     )}
-                  </>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </main>
+        </div>
+      </AppErrorBoundary>
+      {/* Toast HotelNotifications */}
+      <div className="fixed top-4 right-4 z-[100] space-y-4 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 20, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 20, scale: 0.95 }}
+              className={`
+              pointer-events-auto p-4 rounded-2xl shadow-2xl border backdrop-blur-md min-w-[300px]
+              ${
+                toast.type === "success"
+                  ? "bg-emerald-500/90 border-emerald-400 text-white"
+                  : toast.type === "error"
+                    ? "bg-red-500/90 border-red-400 text-white"
+                    : "bg-black/80 border-white/10 text-white"
+              }
+            `}
+            >
+              <div className="flex items-center gap-3">
+                {toast.type === "success" ? (
+                  <CheckCircle2 size={18} />
+                ) : toast.type === "error" ? (
+                  <AlertCircle size={18} />
+                ) : (
+                  <Bell size={18} />
                 )}
-                {activeTab === "rooms" && (
-                  <RoomsModule
-                    rooms={rooms}
-                    bookings={bookings}
-                    globalPreferences={globalPreferences}
-                    isAdmin={isAdmin(user?.role)}
-                    userRole={user?.role}
-                  />
-                )}
-                {activeTab === "staff" && <StaffModule users={users} />}
-                {(activeTab === "restaurant" || activeTab === "bar") && (
-                  <POSModule
-                    type={activeTab === "restaurant" ? "Restaurant" : "Bar"}
-                    menu={menu}
-                    orders={orders}
-                    isAdmin={isAdmin(user?.role)}
-                    userRole={user?.role}
-                    user={user!}
-                    createNotification={createNotification}
-                  />
-                )}
-                {activeTab === "laundry" && (
-                  <LaundryModule
-                    orders={laundry}
-                    services={laundryServices}
-                    isAdmin={isAdmin(user?.role)}
-                    userRole={user?.role}
-                    user={user!}
-                    createNotification={createNotification}
-                  />
-                )}
-                {activeTab === "conference" && (
-                  <ConferenceModule
-                    rooms={conferenceRooms}
-                    services={conferenceServices}
-                    bookings={conferenceBookings}
-                    isAdmin={isAdmin(user?.role)}
-                    userRole={user?.role}
-                    user={user!}
-                    createNotification={createNotification}
-                  />
-                )}
-                {activeTab !== "dashboard" &&
-                  activeTab !== "restaurant" &&
-                  activeTab !== "bar" &&
-                  activeTab !== "staff" &&
-                  activeTab !== "laundry" &&
-                  activeTab !== "conference" &&
-                  activeTab !== "rooms" && (
-                    <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
-                      <AlertCircle size={48} className="text-black/10 mb-4" />
-                      <h3 className="text-xl font-serif italic mb-2">
-                        {activeTab} Module
-                      </h3>
-                      <p className="text-sm text-black/40 max-w-md">
-                        This module is currently being populated with live data.
-                        Please check back shortly or use the Dashboard for an
-                        overview.
-                      </p>
-                    </div>
-                  )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
+                <p className="text-xs font-medium">{toast.message}</p>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
-    </AppErrorBoundary>
+    </>
   );
 }

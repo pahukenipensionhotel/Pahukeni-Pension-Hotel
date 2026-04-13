@@ -193,13 +193,13 @@ export function LoginPage() {
 
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-3">
-              <div className="overflow-hidden rounded-2xl lg:hidden">
+              <div className="overflow-hidden rounded-2xl lg:hidden aspect-video relative bg-black/5">
                 <AnimatePresence mode="sync" initial={false}>
                   <motion.img
                     key={IMAGE_CATALOG.hero[activeImageIndex]}
                     src={IMAGE_CATALOG.hero[activeImageIndex]}
                     alt="Pahukeni scenic property view"
-                    className="h-44 w-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
