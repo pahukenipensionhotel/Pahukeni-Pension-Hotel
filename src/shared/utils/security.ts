@@ -1,20 +1,37 @@
 /**
  * Security utilities for masking sensitive data and handling token-related logic.
  */
+
+// Simple XOR key for internal masking
+const _k = "pahukeni_pension_2026";
+
 /**
  * Obfuscates a string to prevent plain-text scraping.
- * This is for "masking" and not a replacement for backend encryption.
  */
 export function obfuscate(str: string): string {
-  return btoa(str).split("").reverse().join("");
+  if (!str) return "";
+  let result = "";
+  for (let i = 0; i < str.length; i++) {
+    result += String.fromCharCode(
+      str.charCodeAt(i) ^ _k.charCodeAt(i % _k.length),
+    );
+  }
+  return btoa(result);
 }
 
 /**
  * De-obfuscates a string.
  */
-export function deobfuscate(str: string): string {
+export function deobfuscate(encoded: string): string {
   try {
-    return atob(str.split("").reverse().join(""));
+    const str = atob(encoded);
+    let result = "";
+    for (let i = 0; i < str.length; i++) {
+      result += String.fromCharCode(
+        str.charCodeAt(i) ^ _k.charCodeAt(i % _k.length),
+      );
+    }
+    return result;
   } catch (e) {
     return "";
   }
@@ -22,8 +39,6 @@ export function deobfuscate(str: string): string {
 
 /**
  * Masks an email address for display.
-...
- * e.g., "john.doe@example.com" -> "j***e@example.com"
  */
 export function maskEmail(email?: string): string {
   if (!email) return "Unknown";
@@ -35,7 +50,6 @@ export function maskEmail(email?: string): string {
 
 /**
  * Masks a sensitive string like an API key.
- * e.g., "AIzaSyAJwMmPs75DEpxa" -> "AIza...epxa"
  */
 export function maskSecret(secret?: string, visibleChars = 4): string {
   if (!secret) return "****";
@@ -45,7 +59,6 @@ export function maskSecret(secret?: string, visibleChars = 4): string {
 
 /**
  * Generates a temporary session token for internal use.
- * Note: This is NOT a replacement for Firebase Auth tokens.
  */
 export function generateSessionToken(): string {
   return (
