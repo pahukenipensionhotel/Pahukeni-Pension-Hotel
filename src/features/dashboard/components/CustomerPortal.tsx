@@ -1,0 +1,1104 @@
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Bed,
+  Utensils,
+  WashingMachine,
+  Users,
+  LogOut,
+  Menu,
+  ChevronRight,
+  X,
+  Bell,
+  Home as HomeIcon,
+  ClipboardList,
+  Clock,
+  CheckCircle2,
+} from "lucide-react";
+import { signOut } from "firebase/auth";
+import { collection, addDoc } from "firebase/firestore";
+import { auth, db } from "../../../firebase";
+import {
+  Room,
+  MenuItem,
+  Order,
+  LaundryOrder,
+  User,
+  ConferenceRoom,
+  ConferenceService,
+  LaundryService,
+  Notification as HotelNotification,
+} from "../../../shared/types/hotel";
+import {
+  IMAGE_CATALOG,
+  getDefaultRoomImage,
+  getMenuImage,
+} from "../../../shared/assets/imageCatalog";
+import {
+  getHashTab as getRouteHashTab,
+  PORTAL_TABS as PORTAL_ROUTE_TABS,
+  syncHashTab as syncRouteHashTab,
+} from "../../../app/router/routeState";
+import { NotificationService } from "../../../services/notificationService";
+import { NotificationCenter as NotificationCenterPanel } from "../../notifications/components/NotificationCenter";
+import { RoomDetailsModal } from "../../rooms/components/RoomDetailsModal";
+
+const LOCAL_ASSETS = IMAGE_CATALOG;
+
+export const CustomerPortal = ({
+  user,
+  notifications: globalHotelNotifications,
+  markHotelNotificationAsRead,
+  createNotification,
+  rooms,
+  menu,
+  laundryServices,
+  conferenceRooms,
+  conferenceServices,
+  myOrders,
+  myLaundryOrders,
+  myRoomBookings,
+  myConferenceBookings,
+  globalPreferences,
+}: {
+  user: User;
+  notifications: HotelNotification[];
+  markHotelNotificationAsRead: (id: string) => Promise<void>;
+  createNotification: (notif: any) => Promise<void>;
+  rooms: Room[];
+  menu: MenuItem[];
+  laundryServices: LaundryService[];
+  conferenceRooms: ConferenceRoom[];
+  conferenceServices: ConferenceService[];
+  myOrders: Order[];
+  myLaundryOrders: LaundryOrder[];
+  myRoomBookings: any[];
+  myConferenceBookings: any[];
+  globalPreferences?: any[];
+}) => {
+  const HERO_SLIDE_INTERVAL_MS = 4000;
+  const HERO_TRANSITION_SECONDS = 0.55;
+  const [activeTab, setActiveTab] = useState<string>(() =>
+    getRouteHashTab("portal", PORTAL_ROUTE_TABS, "home"),
+  );
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showHotelNotifications, setShowHotelNotifications] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toasts, setToasts] = useState<
+    { id: string; message: string; type: "info" | "success" | "error" }[]
+  >([]);
+  const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
+  const [heroImagesReady, setHeroImagesReady] = useState(false);
+
+  const heroImages = LOCAL_ASSETS.hero;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const preloadImages = async () => {
+      try {
+        await Promise.all(
+          heroImages.map(
+            (src) =>
+              new Promise<void>((resolve) => {
+                const image: HTMLImageElement = new window.Image();
+                const complete = () => resolve();
+                image.onload = complete;
+                image.onerror = complete;
+                image.src = src;
+
+                if ("decode" in image) {
+                  image.decode().then(complete).catch(complete);
+                }
+              }),
+          ),
+        );
+      } finally {
+        if (isMounted) {
+          setHeroImagesReady(true);
+        }
+      }
+    };
+
+    preloadImages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [heroImages]);
+
+  useEffect(() => {
+    if (!heroImagesReady) return;
+
+    const timer = setInterval(() => {
+      setCurrentHeroIndex((prev) => (prev + 1) % heroImages.length);
+    }, HERO_SLIDE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [heroImages.length, heroImagesReady]);
+
+  const addToast = (
+    message: string,
+    type: "info" | "success" | "error" = "info",
+  ) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  };
+
+  const placeOrder = async (item: MenuItem) => {
+    try {
+      const orderRef = await addDoc(collection(db, "orders"), {
+        customer_email: user.email,
+        customer_name: user.name,
+        customer_uid: user.id,
+        items: [{ ...item, quantity: 1 }],
+        total_price: item.price,
+        status: "Pending",
+        type: item.type,
+        created_at: new Date().toISOString(),
+      });
+
+      try {
+        await createNotification({
+          role: item.type === "Restaurant" ? "Waiter" : "Barman",
+          title: `New ${item.type} Order`,
+          message: `New order from ${user.name} for ${item.name}`,
+          type: "order",
+          orderId: orderRef.id,
+        });
+      } catch (notificationError) {
+        console.warn("Order notification failed:", notificationError);
+      }
+
+      addToast("Order placed successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to place order", "error");
+    }
+  };
+
+  const handleRoomCheckIn = async (
+    room: Room,
+    options: { includeBreakfast: boolean; selectedAddons: string[] },
+  ) => {
+    try {
+      const addonFromRoom = (room.additionalServices || [])
+        .filter((s) => options.selectedAddons.includes(s.name))
+        .reduce((sum, s) => sum + s.price, 0);
+      const addonFromGlobal = (globalPreferences || [])
+        .filter((s) => options.selectedAddons.includes(s.name))
+        .reduce((sum, s) => sum + s.price, 0);
+      const finalPrice =
+        room.price +
+        (options.includeBreakfast ? room.breakfastPrice || 0 : 0) +
+        addonFromRoom +
+        addonFromGlobal;
+
+      await addDoc(collection(db, "room_bookings"), {
+        room_id: room.id,
+        room_number: room.number,
+        guest_uid: user.id,
+        guest_name: user.name,
+        guest_email: user.email,
+        total_price: finalPrice,
+        breakfast_included: options.includeBreakfast,
+        additional_services: options.selectedAddons,
+        status: "Pending",
+        check_in: new Date().toISOString(),
+        check_out: new Date(new Date().getTime() + 86400000).toISOString(),
+        created_at: new Date().toISOString(),
+      });
+
+      try {
+        await createNotification({
+          role: "Receptionist",
+          title: "New Check-In Request",
+          message: `${user.name} checked into Room ${room.number} with ${options.includeBreakfast ? "breakfast" : "no breakfast"}${options.selectedAddons.length > 0 ? " and extra services" : ""}`,
+          type: "system",
+          targetTab: "rooms",
+        });
+      } catch (notificationError) {
+        console.warn("Check-in notification failed:", notificationError);
+      }
+
+      addToast(
+        "Check-in request submitted! Total: N$ " + finalPrice,
+        "success",
+      );
+      setSelectedRoom(null);
+    } catch (err) {
+      console.error(err);
+      addToast("Check-in failed", "error");
+    }
+  };
+
+  const placeLaundryOrder = async (service: LaundryService) => {
+    try {
+      const orderRef = await addDoc(collection(db, "laundry_orders"), {
+        customer_email: user.email,
+        guest_name: user.name,
+        customer_uid: user.id,
+        items: [{ ...service, quantity: 1 }],
+        total_price: service.price,
+        status: "Received",
+        created_at: new Date().toISOString(),
+      });
+
+      try {
+        await createNotification({
+          role: "Receptionist",
+          title: "New Laundry Request",
+          message: `New laundry request from ${user.name}`,
+          type: "laundry",
+          orderId: orderRef.id,
+        });
+      } catch (notificationError) {
+        console.warn("Laundry notification failed:", notificationError);
+      }
+
+      addToast("Laundry request sent!", "success");
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to send request", "error");
+    }
+  };
+
+  const lastStatuses = useRef<{ [key: string]: string }>({});
+  const isInitialLoad = useRef(true);
+
+  useEffect(() => {
+    NotificationService.requestPermission();
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const nextTab = getRouteHashTab("portal", PORTAL_ROUTE_TABS, activeTab);
+      setActiveTab((currentTab) =>
+        currentTab === nextTab ? currentTab : nextTab,
+      );
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [activeTab]);
+
+  useEffect(() => {
+    syncRouteHashTab("portal", activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const allOrders = [...myOrders, ...myLaundryOrders];
+    allOrders.forEach((order) => {
+      const prevStatus = lastStatuses.current[order.id];
+      if (prevStatus && prevStatus !== order.status) {
+        const type =
+          "type" in order ? `${order.type} Order` : "Laundry Service";
+        const message = `${type} status updated to: ${order.status}`;
+        const id = Math.random().toString(36).substr(2, 9);
+
+        setToasts((prev) => [...prev, { id, message, type: "success" }]);
+
+        NotificationService.notify("Order Update", {
+          body: message,
+          tag: order.id,
+        });
+
+        setTimeout(() => {
+          setToasts((prev) => prev.filter((n) => n.id !== id));
+        }, 5000);
+      }
+      lastStatuses.current[order.id] = order.status;
+    });
+    isInitialLoad.current = false;
+  }, [myOrders, myLaundryOrders]);
+
+  const getRoomImage = (room: Room) => {
+    if (
+      room.imageUrl &&
+      !room.imageUrl.includes("pexels.com") &&
+      !room.imageUrl.includes("picsum.photos") &&
+      !room.imageUrl.startsWith("/rooms/")
+    ) {
+      return room.imageUrl;
+    }
+
+    return getDefaultRoomImage(room);
+  };
+
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center font-mono">
+        Loading Portal...
+      </div>
+    );
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
+      <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((n) => (
+            <motion.div
+              key={n.id}
+              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-black text-white p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 pointer-events-auto min-w-[300px]"
+            >
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                <Bell size={16} className="text-white" />
+              </div>
+              <p className="text-sm font-medium">{n.message}</p>
+              <button
+                onClick={() =>
+                  setToasts((prev) => prev.filter((notif) => notif.id !== n.id))
+                }
+                className="ml-auto p-1 hover:bg-white/10 rounded-lg"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      <header className="bg-white border-b border-black/5 p-4 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <h1 className="text-xl font-serif italic">Pahukeni Portal</h1>
+            <div className="hidden md:flex items-center gap-1 text-[10px] font-mono uppercase text-black/40">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Guest Access
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <button
+                onClick={() =>
+                  setShowHotelNotifications(!showHotelNotifications)
+                }
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
+              >
+                <Bell size={20} className="text-black/60" />
+                {globalHotelNotifications.filter((n) => !n.read).length > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {showHotelNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 z-50">
+                    <NotificationCenterPanel
+                      notifications={globalHotelNotifications}
+                      onClose={() => setShowHotelNotifications(false)}
+                      onMarkAsRead={markHotelNotificationAsRead}
+                      onNavigate={(type, title) => {
+                        if (type === "order") setActiveTab("orders");
+                        if (type === "laundry") setActiveTab("laundry");
+                        if (type === "conference") setActiveTab("conference");
+                      }}
+                    />
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+            <span className="text-xs font-mono text-black/60 hidden sm:block">
+              {user.name}
+            </span>
+            <button
+              onClick={() => signOut(auth)}
+              className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+              title="Sign Out"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.aside
+              initial={{ x: -300 }}
+              animate={{ x: 0 }}
+              exit={{ x: -300 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 bottom-0 w-64 bg-white z-40 p-6 shadow-2xl lg:hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-serif italic">Menu</h2>
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-2 flex-1">
+                {[
+                  { id: "home", label: "Home", icon: HomeIcon },
+                  { id: "rooms", label: "Rooms", icon: Bed },
+                  { id: "dining", label: "Dining", icon: Utensils },
+                  { id: "laundry", label: "Laundry", icon: WashingMachine },
+                  { id: "conference", label: "Conference", icon: Users },
+                  { id: "orders", label: "My Orders", icon: ClipboardList },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                      activeTab === item.id
+                        ? "bg-black text-white shadow-lg shadow-black/10"
+                        : "bg-white text-black/60 hover:bg-gray-50 border border-black/5"
+                    }`}
+                  >
+                    <item.icon size={18} />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="pt-6 border-t border-black/5">
+                <button
+                  onClick={() => signOut(auth)}
+                  className="w-full flex items-center gap-3 p-4 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                >
+                  <LogOut size={18} />
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <aside className="hidden lg:block lg:col-span-1 space-y-2">
+          {[
+            { id: "home", label: "Home", icon: HomeIcon },
+            { id: "rooms", label: "Rooms", icon: Bed },
+            { id: "dining", label: "Dining", icon: Utensils },
+            { id: "laundry", label: "Laundry", icon: WashingMachine },
+            { id: "conference", label: "Conference", icon: Users },
+            { id: "orders", label: "My Orders", icon: ClipboardList },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                activeTab === item.id
+                  ? "bg-black text-white shadow-lg shadow-black/10"
+                  : "bg-white text-black/60 hover:bg-gray-50 border border-black/5"
+              }`}
+            >
+              <item.icon size={18} />
+              <span className="text-sm font-medium">{item.label}</span>
+            </button>
+          ))}
+        </aside>
+
+        <main className="lg:col-span-3">
+          <AnimatePresence initial={false} mode="sync">
+            {activeTab === "home" && (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="space-y-8"
+              >
+                <div className="relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl group">
+                  {heroImages.map((image, idx) => (
+                    <motion.img
+                      key={image}
+                      src={image}
+                      alt="Pahukeni guest experience"
+                      initial={false}
+                      animate={{
+                        opacity: idx === currentHeroIndex ? 1 : 0,
+                        scale: idx === currentHeroIndex ? 1 : 1.015,
+                      }}
+                      transition={{
+                        opacity: {
+                          duration: heroImagesReady
+                            ? HERO_TRANSITION_SECONDS
+                            : 0.2,
+                          ease: "easeOut",
+                        },
+                        scale: {
+                          duration: heroImagesReady
+                            ? HERO_TRANSITION_SECONDS
+                            : 0.2,
+                          ease: "easeOut",
+                        },
+                      }}
+                      className="absolute inset-0 w-full h-full object-cover brightness-75 will-change-[opacity,transform]"
+                      loading={idx === 0 ? "eager" : "lazy"}
+                      draggable={false}
+                    />
+                  ))}
+
+                  {!heroImagesReady && (
+                    <div className="absolute inset-0 bg-black/40 animate-pulse" />
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8 md:p-12">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <h2 className="text-4xl md:text-6xl font-serif italic text-white mb-4 tracking-tight">
+                        Welcome back, {user.name}
+                      </h2>
+                      <p className="text-white/80 max-w-xl text-sm md:text-base leading-relaxed font-light">
+                        Experience the finest hospitality at Pahukeni Pension.
+                        Your sanctuary of comfort and refined living awaits.
+                      </p>
+                    </motion.div>
+
+                    <div className="flex gap-2 mt-8">
+                      {heroImages.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-1 rounded-full transition-all duration-300 ${idx === currentHeroIndex ? "w-8 bg-white" : "w-2 bg-white/30"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <Utensils size={24} />
+                    </div>
+                    <h3 className="text-lg font-serif italic mb-2">
+                      Fine Dining
+                    </h3>
+                    <p className="text-sm opacity-60 mb-6">
+                      Order exquisite meals directly to your room.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("dining")}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Explore Menu
+                    </button>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <WashingMachine size={24} />
+                    </div>
+                    <h3 className="text-lg font-serif italic mb-2">
+                      Laundry Service
+                    </h3>
+                    <p className="text-sm opacity-60 mb-6">
+                      Professional care for your finest garments.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("laundry")}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Request Service
+                    </button>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center text-center group hover:bg-black hover:text-white transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-black/5 group-hover:bg-white/10 flex items-center justify-center mb-4 transition-colors">
+                      <Users size={24} />
+                    </div>
+                    <h3 className="text-lg font-serif italic mb-2">
+                      Conferences
+                    </h3>
+                    <p className="text-sm opacity-60 mb-6">
+                      World-class facilities for your business needs.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("conference")}
+                      className="text-xs font-mono uppercase tracking-widest border-b border-current pb-1"
+                    >
+                      Book a Room
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex justify-between items-end">
+                    <h3 className="text-2xl font-serif italic">
+                      Curated Spaces
+                    </h3>
+                    <button
+                      onClick={() => setActiveTab("rooms")}
+                      className="text-xs font-mono uppercase text-black/40 hover:text-black transition-colors flex items-center gap-1"
+                    >
+                      View All Rooms <ChevronRight size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {rooms.slice(0, 3).map((room) => (
+                      <div
+                        key={room.id}
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setActiveTab("rooms");
+                        }}
+                        className="group cursor-pointer bg-white rounded-3xl p-4 border border-black/5 shadow-sm hover:shadow-xl transition-all"
+                      >
+                        <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-6 relative shadow-md bg-black">
+                          <img
+                            loading="lazy"
+                            src={getRoomImage(room)}
+                            alt={room.category}
+                            className="w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 flex flex-col justify-end p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="px-3 py-1 bg-white text-black font-black rounded text-[9px] font-mono uppercase tracking-[0.3em]">
+                                  {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
+                                </span>
+                                <span className="text-[9px] text-white/40 font-mono uppercase tracking-widest border-l border-white/20 pl-3">
+                                  REGISTRY
+                                </span>
+                              </div>
+                              <p className="text-white text-7xl font-serif font-black tracking-tighter leading-none">
+                                {room.number.replace(/^[A-Z]+/, "")}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center px-1">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">
+                              Standard Suite
+                            </span>
+                            <h4 className="text-base font-serif font-bold text-[#141414] tracking-tight italic">
+                              Registry Unit {room.number}
+                            </h4>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">
+                              Stay Value
+                            </span>
+                            <p className="text-lg font-serif font-black text-[#141414]">
+                              N$ {room.price}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "rooms" && (
+              <motion.div
+                key="rooms"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-12"
+              >
+                <div className="relative h-64 rounded-3xl overflow-hidden mb-12 shadow-lg">
+                  <img
+                    loading="lazy"
+                    src={LOCAL_ASSETS.hero[1]}
+                    alt="Luxury Living"
+                    className="w-full h-full object-cover brightness-50"
+                  />
+                  <div className="absolute inset-0 flex flex-col justify-center p-12">
+                    <h2 className="text-5xl md:text-7xl font-serif italic text-white mb-4 tracking-tighter">
+                      Our Rooms
+                    </h2>
+                    <p className="text-white/70 max-w-md font-mono uppercase text-[10px] tracking-widest">
+                      Curated spaces designed for ultimate comfort and refined
+                      living.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {rooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm group"
+                    >
+                      <div className="aspect-video overflow-hidden relative">
+                        <img
+                          loading="lazy"
+                          src={getRoomImage(room)}
+                          alt={`Room ${room.number}`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-mono uppercase tracking-wider">
+                          {room.category}
+                        </div>
+                      </div>
+                      <div className="p-6">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="px-2 py-0.5 bg-black/[0.04] border border-black/5 rounded-[4px] text-[8px] font-mono text-black/40 font-bold uppercase tracking-widest shadow-inner">
+                                {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
+                              </span>
+                              <span className="text-[10px] font-mono text-black/20 font-medium uppercase tracking-[0.2em] border-l border-black/5 pl-2">
+                                UNIT REGISTRY
+                              </span>
+                            </div>
+                            <h3 className="text-4xl font-serif font-black tracking-tight text-[#141414] leading-none mb-1">
+                              {room.number.replace(/^[A-Z]+/, "")}
+                            </h3>
+                            <p
+                              className={`text-[9px] font-mono font-medium uppercase tracking-[0.15em] ${
+                                room.status === "Available"
+                                  ? "text-emerald-600"
+                                  : "text-orange-600"
+                              }`}
+                            >
+                              {room.category} Standard • {room.status}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-serif font-black text-[#141414]">
+                              N$ {room.price}
+                            </p>
+                            <p className="text-[9px] text-black/30 font-mono font-medium uppercase tracking-widest">
+                              Base Nightly Rate
+                            </p>
+                          </div>
+                        </div>
+
+                        {room.description && (
+                          <p className="text-sm text-black/60 line-clamp-2 mb-4 h-10">
+                            {room.description}
+                          </p>
+                        )}
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setSelectedRoom(room)}
+                            className="flex-1 py-3 bg-white border border-black/10 text-black rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            disabled={room.status !== "Available"}
+                            className="flex-1 py-3 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-30 hover:bg-black/90 transition-colors"
+                          >
+                            {room.status === "Available"
+                              ? "Book Now"
+                              : "Unavailable"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "dining" && (
+              <motion.div
+                key="dining"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {menu.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white p-4 rounded-2xl border border-black/5 flex gap-4 shadow-sm"
+                    >
+                      <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                        <img
+                          loading="lazy"
+                          src={getMenuImage(item)}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <h3 className="font-serif italic">{item.name}</h3>
+                            <span className="text-sm font-serif italic">
+                              N$ {item.price}
+                            </span>
+                          </div>
+                          <p className="text-[10px] font-mono text-black/40 uppercase mt-1">
+                            {item.category} • {item.type}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => placeOrder(item)}
+                          disabled={item.status === "Out of Stock"}
+                          className="mt-2 text-xs font-mono uppercase text-emerald-600 hover:text-emerald-700 font-bold disabled:text-black/20"
+                        >
+                          {item.status === "Available"
+                            ? "+ Add to Order"
+                            : "Out of Stock"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "laundry" && (
+              <motion.div
+                key="laundry"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-6"
+              >
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">
+                    Laundry Services
+                  </h2>
+                  <div className="space-y-4">
+                    {laundryServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-black/5"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-2 bg-white rounded-lg border border-black/5">
+                            <WashingMachine
+                              size={16}
+                              className="text-black/40"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">
+                              {service.name}
+                            </p>
+                            <p className="text-[10px] font-mono text-black/40 uppercase">
+                              Professional Cleaning
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm font-serif italic">
+                            N$ {service.price}
+                          </span>
+                          <button
+                            onClick={() => placeLaundryOrder(service)}
+                            className="px-4 py-2 bg-black text-white rounded-lg text-xs font-medium hover:bg-black/90 transition-colors"
+                          >
+                            Request
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "conference" && (
+              <motion.div
+                key="conference"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {conferenceRooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-serif italic">
+                            {room.name}
+                          </h3>
+                          <p className="text-xs text-black/40 font-mono uppercase">
+                            Capacity: {room.capacity} People
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-serif italic">
+                            N$ {room.price_per_hour}
+                          </p>
+                          <p className="text-[10px] text-black/40 font-mono uppercase">
+                            per hour
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex items-center gap-2 text-xs text-black/60">
+                          <CheckCircle2
+                            size={14}
+                            className="text-emerald-500"
+                          />
+                          <span>High-speed WiFi</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-black/60">
+                          <CheckCircle2
+                            size={14}
+                            className="text-emerald-500"
+                          />
+                          <span>Air Conditioning</span>
+                        </div>
+                      </div>
+                      <button className="w-full py-3 border border-black/10 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                        Inquire for Booking
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">
+                    Additional Services
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {conferenceServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="p-4 bg-gray-50 rounded-xl border border-black/5"
+                      >
+                        <p className="text-sm font-medium mb-1">
+                          {service.name}
+                        </p>
+                        <p className="text-xs font-serif italic text-black/40">
+                          N$ {service.price}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "orders" && (
+              <motion.div
+                key="orders"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-8"
+              >
+                <div className="bg-white p-8 rounded-2xl border border-black/5 shadow-sm">
+                  <h2 className="text-xl font-serif italic mb-6">
+                    Recent Orders
+                  </h2>
+                  <div className="space-y-4">
+                    {[...myOrders, ...myLaundryOrders]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.created_at).getTime() -
+                          new Date(a.created_at).getTime(),
+                      )
+                      .map((order) => (
+                        <div
+                          key={order.id}
+                          className="p-4 bg-gray-50 rounded-xl border border-black/5 flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={`p-2 rounded-lg ${
+                                order.status === "Completed" ||
+                                order.status === "Delivered"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : order.status === "Accepted" ||
+                                      order.status === "Preparing"
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              <Clock size={16} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {"type" in order
+                                  ? `${order.type} Order`
+                                  : "Laundry Service"}
+                              </p>
+                              <p className="text-[10px] font-mono text-black/40 uppercase">
+                                {new Date(order.created_at).toLocaleString()}
+                              </p>
+                              {order.estimated_arrival && (
+                                <p className="text-[10px] font-mono text-blue-600 uppercase mt-1 font-bold">
+                                  Est.{" "}
+                                  {"type" in order ? "Arrival" : "Delivery"}:{" "}
+                                  {order.estimated_arrival}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-serif italic">
+                              N$ {order.total_price}
+                            </p>
+                            <span
+                              className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
+                                order.status === "Completed" ||
+                                order.status === "Delivered"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : order.status === "Accepted" ||
+                                      order.status === "Preparing"
+                                    ? "bg-blue-600 text-white animate-pulse"
+                                    : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {order.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    {myOrders.length === 0 && myLaundryOrders.length === 0 && (
+                      <p className="text-center py-8 text-black/20 font-mono text-sm">
+                        No orders yet
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+
+        <AnimatePresence>
+          {selectedRoom && (
+            <RoomDetailsModal
+              selectedRoom={selectedRoom}
+              onClose={() => setSelectedRoom(null)}
+              onCheckIn={handleRoomCheckIn}
+              globalPreferences={globalPreferences}
+              getRoomImage={getRoomImage}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};

@@ -5,10 +5,21 @@
       "rules": "firestore.rules"
     }
   ],
-  "storage": {
-    "rules": "storage.rules"
-  },
   "functions": {
     "source": "functions"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
   }
 }

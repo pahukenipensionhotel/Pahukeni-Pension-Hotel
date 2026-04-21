@@ -1,7 +1,13 @@
 export interface User {
   id: string;
   username: string;
-  role: "Admin" | "Receptionist" | "Waiter" | "Barman" | "Laundry" | "Customer";
+  role:
+    | "Admin"
+    | "Receptionist"
+    | "Waiter"
+    | "Barman"
+    | "Laundry man"
+    | "Customer";
   name: string;
   email?: string;
 }
@@ -41,7 +47,14 @@ export interface Order {
   customer_uid?: string;
   items: any[];
   total_price: number;
-  status: "Pending" | "Accepted" | "Preparing" | "Serving" | "Completed" | "Cancelled" | "Paid";
+  status:
+    | "Pending"
+    | "Accepted"
+    | "Preparing"
+    | "Serving"
+    | "Completed"
+    | "Cancelled"
+    | "Paid";
   type: "Restaurant" | "Bar";
   created_at: string;
   estimated_arrival?: string;

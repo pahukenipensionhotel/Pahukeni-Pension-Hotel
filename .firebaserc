@@ -1,6 +1,7 @@
 {
   "projects": {
-    "staging": "ai-studio-applet-webapp-a6a81"
+    "staging": "ai-studio-applet-webapp-a6a81",
+    "default": "ai-studio-applet-webapp-a6a81"
   },
   "targets": {},
   "etags": {}

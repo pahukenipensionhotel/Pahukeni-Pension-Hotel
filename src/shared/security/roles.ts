@@ -5,9 +5,11 @@ export const STAFF_ROLES: User["role"][] = [
   "Receptionist",
   "Waiter",
   "Barman",
-  "Laundry",
+  "Laundry man",
 ];
 
-export function isStaffRole(role?: User["role"] | null): role is Exclude<User["role"], "Customer"> {
+export function isStaffRole(
+  role?: User["role"] | null,
+): role is Exclude<User["role"], "Customer"> {
   return !!role && STAFF_ROLES.includes(role);
 }

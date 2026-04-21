@@ -10,7 +10,7 @@ export function canManageRooms(role?: User["role"] | null) {
 }
 
 export function canManageLaundry(role?: User["role"] | null) {
-  return role === "Admin" || role === "Receptionist" || role === "Laundry";
+  return role === "Admin" || role === "Receptionist" || role === "Laundry man";
 }
 
 export function canManageConference(role?: User["role"] | null) {
@@ -21,7 +21,10 @@ export function canManageStaff(role?: User["role"] | null) {
   return role === "Admin";
 }
 
-export function canManagePosMenu(type: "Restaurant" | "Bar", role?: User["role"] | null) {
+export function canManagePosMenu(
+  type: "Restaurant" | "Bar",
+  role?: User["role"] | null,
+) {
   return (
     role === "Admin" ||
     (type === "Restaurant" && role === "Waiter") ||
@@ -33,8 +36,15 @@ export function canManageInventory(role?: User["role"] | null) {
   return role === "Admin" || role === "Barman";
 }
 
-export function canReceiveOrderNotifications(type: "Restaurant" | "Bar", role?: User["role"] | null) {
-  return role === "Admin" || (type === "Restaurant" && role === "Waiter") || (type === "Bar" && role === "Barman");
+export function canReceiveOrderNotifications(
+  type: "Restaurant" | "Bar",
+  role?: User["role"] | null,
+) {
+  return (
+    role === "Admin" ||
+    (type === "Restaurant" && role === "Waiter") ||
+    (type === "Bar" && role === "Barman")
+  );
 }
 
 export function canReceiveFrontDeskNotifications(role?: User["role"] | null) {

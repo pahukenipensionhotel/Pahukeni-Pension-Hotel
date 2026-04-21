@@ -42,7 +42,7 @@ export const RoomDetailsModal = ({
   }, [selectedRoom, includeBreakfast, selectedAddons, globalPreferences]);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-60">
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -55,6 +55,7 @@ export const RoomDetailsModal = ({
             alt={`Room ${selectedRoom.number}`}
             className="w-full h-full object-cover absolute inset-0"
             referrerPolicy="no-referrer"
+            loading="lazy"
           />
           <button
             onClick={onClose}
@@ -68,7 +69,7 @@ export const RoomDetailsModal = ({
             <div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="px-3 py-1 bg-black text-white rounded-[4px] text-[10px] font-mono font-bold uppercase tracking-[0.3em] leading-none shadow-xl">
+                  <span className="px-3 py-1 bg-black text-white rounded-sm text-[10px] font-mono font-bold uppercase tracking-[0.3em] leading-none shadow-xl">
                     {selectedRoom.number.match(/^[A-Z]+/)?.[0] || "RM"}
                   </span>
                   <span className="text-[12px] font-mono text-black/30 font-medium uppercase tracking-[0.25em] border-l border-black/10 pl-4">

@@ -1,11 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Plus, Edit2, Trash2, X, ClipboardList } from "lucide-react";
-import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch } from "firebase/firestore";
+import {
+  doc,
+  updateDoc,
+  addDoc,
+  collection,
+  deleteDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import { Room, User } from "../../../shared/types/hotel";
 import { canManageRooms } from "../../../shared/security/authorization";
-import { handleFirestoreError, OperationType } from "../../../shared/validation/inputs";
+import {
+  handleFirestoreError,
+  OperationType,
+} from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
 import { createWorkflowNotification } from "../../notifications/services/notificationWorkflow";
 
@@ -13,10 +23,13 @@ import { createWorkflowNotification } from "../../notifications/services/notific
 const LOCAL_ASSETS = {
   rooms: {
     single: IMAGE_CATALOG.rooms.single,
+    singleGallery: IMAGE_CATALOG.rooms.singleGallery,
     double: IMAGE_CATALOG.rooms.double,
+    doubleGallery: IMAGE_CATALOG.rooms.doubleGallery,
     doubleAlt: IMAGE_CATALOG.rooms.doubleAlt,
     vip: IMAGE_CATALOG.rooms.vip,
-  }
+    exterior: IMAGE_CATALOG.rooms.exterior,
+  },
 };
 
 const parseNumberInput = (val: string) => {
@@ -39,7 +52,8 @@ export const RoomsModule = ({
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [portfolioServices, setPortfolioServices] = useState<any[]>(globalPreferences);
+  const [portfolioServices, setPortfolioServices] =
+    useState<any[]>(globalPreferences);
   const [newRoom, setNewRoom] = useState({
     number: "",
     category: "Single",
@@ -60,7 +74,7 @@ export const RoomsModule = ({
     setPortfolioServices(globalPreferences);
   }, [globalPreferences]);
 
-  const handleAddRoom = async (e?: React.FormEvent) => {
+  const handleAddRoom = async (e?: React.FormEvent<HTMLFormElement>) => {
     if (e) e.preventDefault();
 
     const { prefix, number, ...roomData } = newRoom;
@@ -131,13 +145,27 @@ export const RoomsModule = ({
     }
   };
 
-  const [activeSubTab, setActiveSubTab] = useState<"rooms" | "bookings" | "services">("rooms");
+  const [activeSubTab, setActiveSubTab] = useState<
+    "rooms" | "bookings" | "services"
+  >("rooms");
   const [newPref, setNewPref] = useState({ name: "", price: "" });
   const [isAddingPref, setIsAddingPref] = useState(false);
   const [isSavingPref, setIsSavingPref] = useState(false);
-  const [portfolioFormError, setPortfolioFormError] = useState<string | null>(null);
+  const [portfolioFormError, setPortfolioFormError] = useState<string | null>(
+    null,
+  );
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const handleAddPortfolioService = async (e?: React.FormEvent) => {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveImageIndex((prev) => (prev + 1) % 5); // Cycle through first 5 gallery images
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAddPortfolioService = async (
+    e?: React.FormEvent<HTMLFormElement>,
+  ) => {
     if (e) e.preventDefault();
     if (isSavingPref) return;
 
@@ -149,8 +177,14 @@ export const RoomsModule = ({
       setPortfolioFormError("Please provide a service name.");
       return;
     }
-    if (!normalizedPrice || !Number.isFinite(validatedPrice) || validatedPrice < 0) {
-      setPortfolioFormError("Please provide a valid non-negative service price.");
+    if (
+      !normalizedPrice ||
+      !Number.isFinite(validatedPrice) ||
+      validatedPrice < 0
+    ) {
+      setPortfolioFormError(
+        "Please provide a valid non-negative service price.",
+      );
       return;
     }
 
@@ -161,7 +195,10 @@ export const RoomsModule = ({
         price: validatedPrice,
         created_at: new Date().toISOString(),
       });
-      setPortfolioServices((prev) => [...prev, { id: docRef.id, name: serviceName, price: validatedPrice }]);
+      setPortfolioServices((prev) => [
+        ...prev,
+        { id: docRef.id, name: serviceName, price: validatedPrice },
+      ]);
       setNewPref({ name: "", price: "" });
       setIsAddingPref(false);
 
@@ -173,7 +210,11 @@ export const RoomsModule = ({
       });
     } catch (err) {
       console.error("Firestore Error (Global Preferences):", err);
-      setPortfolioFormError(err instanceof Error ? err.message : "Failed to save the portfolio service.");
+      setPortfolioFormError(
+        err instanceof Error
+          ? err.message
+          : "Failed to save the portfolio service.",
+      );
     } finally {
       setIsSavingPref(false);
     }
@@ -192,7 +233,9 @@ export const RoomsModule = ({
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
-          <h2 className="text-xl md:text-2xl font-serif italic">Room Management</h2>
+          <h2 className="text-xl md:text-2xl font-serif italic">
+            Room Management
+          </h2>
           <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit">
             <button
               onClick={() => setActiveSubTab("rooms")}
@@ -206,7 +249,8 @@ export const RoomsModule = ({
               className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
                 ${activeSubTab === "bookings" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
-              Daily Bookings ({bookings.filter((b) => b.status === "Pending").length})
+              Daily Bookings (
+              {bookings.filter((b) => b.status === "Pending").length})
             </button>
             <button
               onClick={() => setActiveSubTab("services")}
@@ -262,12 +306,30 @@ export const RoomsModule = ({
               className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-lg transition-all relative group"
             >
               <div className="aspect-video mb-4 rounded-xl overflow-hidden bg-gray-100 relative group-hover:shadow-inner">
-                <img
-                  src={room.imageUrl || LOCAL_ASSETS.rooms.single}
-                  alt={`Room ${room.number}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={
+                      room.imageUrl ||
+                      (room.category === "Single"
+                        ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
+                        : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
+                    }
+                    src={
+                      room.imageUrl ||
+                      (room.category === "Single"
+                        ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
+                        : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
+                    }
+                    alt={`Room ${room.number}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                </AnimatePresence>
                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   {canManage && (
                     <>
@@ -280,7 +342,11 @@ export const RoomsModule = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`Are you sure you want to delete Room ${room.number}?`)) {
+                          if (
+                            confirm(
+                              `Are you sure you want to delete Room ${room.number}?`,
+                            )
+                          ) {
                             deleteRoom(room.id);
                           }
                         }}
@@ -297,7 +363,7 @@ export const RoomsModule = ({
               <div className="flex justify-between items-start mb-6">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-3 mb-2.5">
-                    <span className="px-2.5 py-1 bg-[#141414] text-white rounded-[4px] text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
+                    <span className="px-2.5 py-1 bg-[#141414] text-white rounded-sm text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
                       {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
                     </span>
                     <span className="text-[9px] font-mono text-black/30 font-bold uppercase tracking-[0.2em] border-l border-black/10 pl-4">
@@ -329,7 +395,7 @@ export const RoomsModule = ({
               </div>
 
               <div className="space-y-3">
-                <div className="flex justify-between items-end text-xs pt-4 border-t border-black/[0.03]">
+                <div className="flex justify-between items-end text-xs pt-4 border-t border-black/3">
                   <div className="flex flex-col">
                     <span className="text-[9px] text-black/30 font-mono uppercase tracking-widest mb-1">
                       Standard Rate
@@ -340,20 +406,21 @@ export const RoomsModule = ({
                   </div>
                 </div>
 
-                {room.additionalServices && room.additionalServices.length > 0 && (
-                  <div className="pt-2 border-t border-black/5">
-                    <div className="flex flex-wrap gap-1">
-                      {room.additionalServices.map((s, i) => (
-                        <span
-                          key={i}
-                          className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100"
-                        >
-                          {s.name}
-                        </span>
-                      ))}
+                {room.additionalServices &&
+                  room.additionalServices.length > 0 && (
+                    <div className="pt-2 border-t border-black/5">
+                      <div className="flex flex-wrap gap-1">
+                        {room.additionalServices.map((s, i) => (
+                          <span
+                            key={i}
+                            className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100"
+                          >
+                            {s.name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <p className="text-[10px] text-black/50 line-clamp-2 h-7 italic">
                   {room.description || "Premium room with modern essentials..."}
@@ -363,7 +430,9 @@ export const RoomsModule = ({
                   {room.status === "Available" ? (
                     <button
                       onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), { status: "Occupied" });
+                        await updateDoc(doc(db, "rooms", room.id), {
+                          status: "Occupied",
+                        });
                       }}
                       className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
                     >
@@ -372,7 +441,9 @@ export const RoomsModule = ({
                   ) : (
                     <button
                       onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), { status: "Available" });
+                        await updateDoc(doc(db, "rooms", room.id), {
+                          status: "Available",
+                        });
                       }}
                       className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
                     >
@@ -390,23 +461,42 @@ export const RoomsModule = ({
             <table className="w-full text-left">
               <thead className="bg-[#F9F9F8] border-b border-black/5">
                 <tr>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Guest</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Room</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Services</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Total Price</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">Status</th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">Actions</th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Guest
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Room
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Services
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Total Price
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Status
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
                 {bookings
                   .filter((b: any) => b.status === "Pending")
                   .map((booking: any) => (
-                    <tr key={booking.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={booking.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
                       <td className="p-6">
                         <div className="flex flex-col">
-                          <span className="font-medium text-sm">{booking.guest_name}</span>
-                          <span className="text-[10px] text-black/40 font-mono">{booking.guest_email}</span>
+                          <span className="font-medium text-sm">
+                            {booking.guest_name}
+                          </span>
+                          <span className="text-[10px] text-black/40 font-mono">
+                            {booking.guest_email}
+                          </span>
                         </div>
                       </td>
                       <td className="p-6">
@@ -431,18 +521,22 @@ export const RoomsModule = ({
                               Breakfast
                             </span>
                           )}
-                          {booking.additional_services?.map((svc: string, i: number) => (
-                            <span
-                              key={i}
-                              className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit"
-                            >
-                              {svc}
-                            </span>
-                          ))}
+                          {booking.additional_services?.map(
+                            (svc: string, i: number) => (
+                              <span
+                                key={i}
+                                className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit"
+                              >
+                                {svc}
+                              </span>
+                            ),
+                          )}
                         </div>
                       </td>
                       <td className="p-6">
-                        <span className="text-sm font-serif italic font-medium">N$ {booking.total_price}</span>
+                        <span className="text-sm font-serif italic font-medium">
+                          N$ {booking.total_price}
+                        </span>
                       </td>
                       <td className="p-6">
                         <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-mono uppercase animate-pulse">
@@ -455,10 +549,18 @@ export const RoomsModule = ({
                             onClick={async () => {
                               try {
                                 const batch = writeBatch(db);
-                                batch.update(doc(db, "room_bookings", booking.id), { status: "Confirmed" });
-                                const bookedRoom = rooms.find((room) => room.number === booking.room_number);
+                                batch.update(
+                                  doc(db, "room_bookings", booking.id),
+                                  { status: "Confirmed" },
+                                );
+                                const bookedRoom = rooms.find(
+                                  (room) => room.number === booking.room_number,
+                                );
                                 if (bookedRoom) {
-                                  batch.update(doc(db, "rooms", bookedRoom.id), { status: "Occupied" });
+                                  batch.update(
+                                    doc(db, "rooms", bookedRoom.id),
+                                    { status: "Occupied" },
+                                  );
                                 }
                                 await batch.commit();
                                 await createWorkflowNotification({
@@ -468,7 +570,11 @@ export const RoomsModule = ({
                                   type: "system",
                                 });
                               } catch (err) {
-                                handleFirestoreError(err, OperationType.UPDATE, "room_bookings");
+                                handleFirestoreError(
+                                  err,
+                                  OperationType.UPDATE,
+                                  "room_bookings",
+                                );
                               }
                             }}
                             className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2"
@@ -479,9 +585,13 @@ export const RoomsModule = ({
                       </td>
                     </tr>
                   ))}
-                {bookings.filter((b: any) => b.status === "Pending").length === 0 && (
+                {bookings.filter((b: any) => b.status === "Pending").length ===
+                  0 && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-black/20 font-mono text-sm italic">
+                    <td
+                      colSpan={6}
+                      className="p-12 text-center text-black/20 font-mono text-sm italic"
+                    >
                       No pending booking requests.
                     </td>
                   </tr>
@@ -497,7 +607,9 @@ export const RoomsModule = ({
               <ClipboardList size={24} />
             </div>
             <div>
-              <h3 className="text-lg font-serif italic text-blue-900 leading-none mb-1">Service Portfolio</h3>
+              <h3 className="text-lg font-serif italic text-blue-900 leading-none mb-1">
+                Service Portfolio
+              </h3>
               <p className="text-[11px] font-mono text-blue-700/60 uppercase tracking-widest">
                 Global metadata shared across all rooms
               </p>
@@ -510,8 +622,12 @@ export const RoomsModule = ({
                 className="bg-white p-5 rounded-2xl border border-black/5 flex justify-between items-center group hover:bg-black hover:text-white transition-all cursor-default relative shadow-sm"
               >
                 <div>
-                  <h4 className="text-xs font-bold font-mono uppercase tracking-tighter mb-1">{pref.name}</h4>
-                  <p className="text-lg font-serif italic opacity-60">N$ {pref.price}</p>
+                  <h4 className="text-xs font-bold font-mono uppercase tracking-tighter mb-1">
+                    {pref.name}
+                  </h4>
+                  <p className="text-lg font-serif italic opacity-60">
+                    N$ {pref.price}
+                  </p>
                 </div>
                 {canManage && (
                   <button
@@ -539,13 +655,18 @@ export const RoomsModule = ({
               <div className="flex justify-between items-center mb-8 pb-4 border-b border-black/5">
                 <div>
                   <h3 className="text-2xl font-serif italic text-[#141414]">
-                    {editingRoomId ? `Edit Room ${newRoom.number}` : "Register New Room"}
+                    {editingRoomId
+                      ? `Edit Room ${newRoom.number}`
+                      : "Register New Room"}
                   </h3>
                   <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
                     Direct Cloud Synchronization Active
                   </p>
                 </div>
-                <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                <button
+                  onClick={() => setIsAdding(false)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                >
                   <X size={24} className="text-black/40" />
                 </button>
               </div>
@@ -558,17 +679,31 @@ export const RoomsModule = ({
                     </label>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Category</label>
+                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
+                          Category
+                        </label>
                         <select
                           value={newRoom.category}
                           onChange={(e) => {
                             const cat = e.target.value;
-                            const newPrefix = cat === "Single" ? "SR" : cat === "Double" ? "DR" : cat === "VIP" ? "VR" : "PR";
+                            const newPrefix =
+                              cat === "Single"
+                                ? "SR"
+                                : cat === "Double"
+                                  ? "DR"
+                                  : cat === "VIP"
+                                    ? "VR"
+                                    : "PR";
                             setNewRoom({
                               ...newRoom,
                               category: cat,
                               prefix: newPrefix,
-                              imageUrl: cat === "Single" ? LOCAL_ASSETS.rooms.single : cat === "Double" ? LOCAL_ASSETS.rooms.double : LOCAL_ASSETS.rooms.vip,
+                              imageUrl:
+                                cat === "Single"
+                                  ? LOCAL_ASSETS.rooms.single
+                                  : cat === "Double"
+                                    ? LOCAL_ASSETS.rooms.double
+                                    : LOCAL_ASSETS.rooms.vip,
                             });
                           }}
                           className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-2 focus:ring-black/5 outline-none transition-all text-xs"
@@ -581,10 +716,14 @@ export const RoomsModule = ({
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Prefix</label>
+                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
+                            Prefix
+                          </label>
                           <select
                             value={newRoom.prefix}
-                            onChange={(e) => setNewRoom({ ...newRoom, prefix: e.target.value })}
+                            onChange={(e) =>
+                              setNewRoom({ ...newRoom, prefix: e.target.value })
+                            }
                             className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
                           >
                             <option value="SR">SR (Single)</option>
@@ -595,13 +734,17 @@ export const RoomsModule = ({
                           </select>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">Room #</label>
+                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
+                            Room #
+                          </label>
                           <input
                             type="text"
                             required
                             placeholder="e.g. 001"
                             value={newRoom.number}
-                            onChange={(e) => setNewRoom({ ...newRoom, number: e.target.value })}
+                            onChange={(e) =>
+                              setNewRoom({ ...newRoom, number: e.target.value })
+                            }
                             className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
                           />
                         </div>
@@ -615,38 +758,66 @@ export const RoomsModule = ({
                     </label>
                     <div className="space-y-4">
                       <div className="relative">
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1 pl-1">Nightly Rate (N$)</label>
+                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1 pl-1">
+                          Nightly Rate (N$)
+                        </label>
                         <input
                           type="number"
                           required
                           value={newRoom.price}
-                          onChange={(e) => setNewRoom({ ...newRoom, price: parseNumberInput(e.target.value) })}
+                          onChange={(e) =>
+                            setNewRoom({
+                              ...newRoom,
+                              price: parseNumberInput(e.target.value),
+                            })
+                          }
                           className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-medium text-sm"
                         />
                       </div>
-                      <div className="p-4 bg-emerald-500/[0.03] rounded-2xl border border-emerald-500/10">
+                      <div className="p-4 bg-emerald-500/300 rounded-2xl border border-emerald-500/10">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <input
                               type="checkbox"
                               id="bf-toggle-edit"
                               checked={newRoom.breakfastIncluded}
-                              onChange={(e) => setNewRoom({ ...newRoom, breakfastIncluded: e.target.checked })}
+                              onChange={(e) =>
+                                setNewRoom({
+                                  ...newRoom,
+                                  breakfastIncluded: e.target.checked,
+                                })
+                              }
                               className="w-4 h-4 rounded-lg border-emerald-500/20 text-emerald-600 focus:ring-emerald-500/20"
                             />
-                            <label htmlFor="bf-toggle-edit" className="text-[10px] font-mono uppercase text-emerald-800 font-bold">
+                            <label
+                              htmlFor="bf-toggle-edit"
+                              className="text-[10px] font-mono uppercase text-emerald-800 font-bold"
+                            >
                               Standard Breakfast
                             </label>
                           </div>
-                          {newRoom.breakfastIncluded && <span className="text-[10px] font-mono text-emerald-600/60 font-bold">ACTIVE</span>}
+                          {newRoom.breakfastIncluded && (
+                            <span className="text-[10px] font-mono text-emerald-600/60 font-bold">
+                              ACTIVE
+                            </span>
+                          )}
                         </div>
                         {newRoom.breakfastIncluded && (
                           <div className="flex items-center justify-between pt-2 border-t border-emerald-500/5">
-                            <span className="text-[9px] font-mono text-emerald-700/50 uppercase">Service Price</span>
+                            <span className="text-[9px] font-mono text-emerald-700/50 uppercase">
+                              Service Price
+                            </span>
                             <input
                               type="number"
                               value={newRoom.breakfastPrice}
-                              onChange={(e) => setNewRoom({ ...newRoom, breakfastPrice: parseNumberInput(e.target.value) })}
+                              onChange={(e) =>
+                                setNewRoom({
+                                  ...newRoom,
+                                  breakfastPrice: parseNumberInput(
+                                    e.target.value,
+                                  ),
+                                })
+                              }
                               className="w-20 p-1 bg-transparent border-b border-emerald-500/10 text-right text-xs font-mono focus:border-emerald-500 outline-none"
                             />
                           </div>
@@ -659,13 +830,60 @@ export const RoomsModule = ({
                     <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest italic">
                       Inventory Media
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Image URL for the room gallery..."
-                      value={newRoom.imageUrl}
-                      onChange={(e) => setNewRoom({ ...newRoom, imageUrl: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-[9px] text-black/40 font-mono italic"
-                    />
+                    <div className="space-y-3">
+                      <div className="aspect-video w-full rounded-2xl overflow-hidden bg-gray-100 border border-black/5 relative group">
+                        <img
+                          loading="lazy"
+                          src={newRoom.imageUrl}
+                          alt="Room Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <p className="text-[10px] text-white font-mono uppercase tracking-widest">
+                            Selected Image
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-xl border border-black/5">
+                        {(newRoom.category === "Single"
+                          ? LOCAL_ASSETS.rooms.singleGallery
+                          : newRoom.category === "Double"
+                            ? LOCAL_ASSETS.rooms.doubleGallery
+                            : [
+                                ...LOCAL_ASSETS.rooms.singleGallery,
+                                ...LOCAL_ASSETS.rooms.doubleGallery,
+                                ...LOCAL_ASSETS.rooms.exterior,
+                              ]
+                        ).map((img, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() =>
+                              setNewRoom({ ...newRoom, imageUrl: img })
+                            }
+                            className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${newRoom.imageUrl === img ? "border-black scale-90" : "border-transparent opacity-60 hover:opacity-100"}`}
+                          >
+                            <img
+                              loading="lazy"
+                              src={img}
+                              className="w-full h-full object-cover"
+                              alt={`Option ${idx}`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+
+                      <input
+                        type="text"
+                        placeholder="Or paste a custom Image URL..."
+                        value={newRoom.imageUrl}
+                        onChange={(e) =>
+                          setNewRoom({ ...newRoom, imageUrl: e.target.value })
+                        }
+                        className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-[9px] text-black/40 font-mono italic"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -677,22 +895,33 @@ export const RoomsModule = ({
                     <textarea
                       placeholder="Craft a compelling description..."
                       value={newRoom.description}
-                      onChange={(e) => setNewRoom({ ...newRoom, description: e.target.value })}
+                      onChange={(e) =>
+                        setNewRoom({ ...newRoom, description: e.target.value })
+                      }
                       className="w-full h-28 p-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-xs leading-relaxed italic text-black/70 resize-none font-serif"
                     />
                   </div>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-black/5">
-                      <label className="block text-[10px] font-mono uppercase text-black/40 font-bold tracking-widest">Premium Metadata</label>
+                      <label className="block text-[10px] font-mono uppercase text-black/40 font-bold tracking-widest">
+                        Premium Metadata
+                      </label>
                       <select
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val) {
                             const [name, price] = val.split("|");
-                            if (!newRoom.additionalServices.find((s) => s.name === name)) {
+                            if (
+                              !newRoom.additionalServices.find(
+                                (s) => s.name === name,
+                              )
+                            ) {
                               setNewRoom({
                                 ...newRoom,
-                                additionalServices: [...newRoom.additionalServices, { name, price: parseNumberInput(price) }],
+                                additionalServices: [
+                                  ...newRoom.additionalServices,
+                                  { name, price: parseNumberInput(price) },
+                                ],
                               });
                             }
                           }
@@ -702,7 +931,10 @@ export const RoomsModule = ({
                       >
                         <option value="">+ Add Service</option>
                         {portfolioServices.map((pref) => (
-                          <option key={pref.id} value={`${pref.name}|${pref.price}`}>
+                          <option
+                            key={pref.id}
+                            value={`${pref.name}|${pref.price}`}
+                          >
                             {pref.name} (N$ {pref.price})
                           </option>
                         ))}
@@ -712,9 +944,11 @@ export const RoomsModule = ({
                       {newRoom.additionalServices.map((s, i) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between px-4 py-2.5 bg-black/[0.02] border border-black/5 rounded-xl text-[10px] font-mono group hover:bg-black hover:text-white transition-all cursor-default"
+                          className="flex items-center justify-between px-4 py-2.5 bg-black/2 border border-black/5 rounded-xl text-[10px] font-mono group hover:bg-black hover:text-white transition-all cursor-default"
                         >
-                          <span className="font-bold tracking-tight">{s.name}</span>
+                          <span className="font-bold tracking-tight">
+                            {s.name}
+                          </span>
                           <div className="flex items-center gap-3">
                             <span className="opacity-40">N$ {s.price}</span>
                             <button
@@ -722,7 +956,10 @@ export const RoomsModule = ({
                               onClick={() =>
                                 setNewRoom({
                                   ...newRoom,
-                                  additionalServices: newRoom.additionalServices.filter((_, idx) => idx !== i),
+                                  additionalServices:
+                                    newRoom.additionalServices.filter(
+                                      (_, idx) => idx !== i,
+                                    ),
                                 })
                               }
                               className="text-red-500/40 group-hover:text-white transition-colors"
@@ -740,7 +977,9 @@ export const RoomsModule = ({
                       onClick={() => handleAddRoom()}
                       className="w-full py-5 bg-black text-white rounded-2xl font-medium shadow-2xl shadow-black/20 hover:scale-[1.01] active:scale-95 transition-all text-xs uppercase tracking-[0.3em] font-mono"
                     >
-                      {editingRoomId ? "Update Live Registry" : "Commit to Database"}
+                      {editingRoomId
+                        ? "Update Live Registry"
+                        : "Commit to Database"}
                     </button>
                   </div>
                 </div>
@@ -758,7 +997,9 @@ export const RoomsModule = ({
               className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-black/5"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-serif italic text-blue-900">New Portfolio Service</h3>
+                <h3 className="text-xl font-serif italic text-blue-900">
+                  New Portfolio Service
+                </h3>
                 <button
                   type="button"
                   onClick={() => {
@@ -779,7 +1020,9 @@ export const RoomsModule = ({
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Service Name</label>
+                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
+                    Service Name
+                  </label>
                   <input
                     type="text"
                     required
@@ -793,7 +1036,9 @@ export const RoomsModule = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">Standard Price (N$)</label>
+                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
+                    Standard Price (N$)
+                  </label>
                   <input
                     type="number"
                     required
@@ -807,13 +1052,17 @@ export const RoomsModule = ({
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none"
                   />
                 </div>
-                {portfolioFormError && <p className="text-sm text-red-600">{portfolioFormError}</p>}
+                {portfolioFormError && (
+                  <p className="text-sm text-red-600">{portfolioFormError}</p>
+                )}
                 <button
                   type="submit"
                   disabled={isSavingPref}
                   className="w-full py-4 bg-blue-600 text-white rounded-xl font-medium mt-4 shadow-lg shadow-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {isSavingPref ? "Saving Portfolio Service..." : "Register Service Portfolio"}
+                  {isSavingPref
+                    ? "Saving Portfolio Service..."
+                    : "Register Service Portfolio"}
                 </button>
               </form>
             </motion.div>

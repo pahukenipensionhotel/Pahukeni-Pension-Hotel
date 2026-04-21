@@ -1,13 +1,21 @@
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import {
+  getMessaging,
+  getToken,
+  onMessage,
+  deleteToken,
+} from "firebase/messaging";
+import { doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "./client";
-import firebaseConfig from "../../../firebase-applet-config.json";
 
 // VAPID key should be set from your Firebase Console (Cloud Messaging settings)
-const DEFAULT_VAPID_KEY = process.env.VITE_FIREBASE_VAPID_KEY || "";
+const DEFAULT_VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
 
 let lastSavedToken: string | null = null;
+const TOKEN_REFRESH_INTERVAL = 1000 * 60 * 60 * 24 * 7; // Refresh once a week
 
+/**
+ * Registers for push notifications and handles token rotation.
+ */
 export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     console.warn("Service workers are not supported in this environment.");
@@ -21,21 +29,20 @@ export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
     ) {
       return null;
     }
+
     // Register service worker from the public root
     const registration = await navigator.serviceWorker.register(
       "/firebase-messaging-sw.js",
     );
-    console.log("Service worker registered:", registration.scope);
-
     const messaging = getMessaging();
 
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
-      console.warn("Notification permission not granted.");
       return null;
     }
 
-    const token = await getToken(messaging, {
+    // Attempt to get token
+    let token = await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: registration,
     });
@@ -45,24 +52,35 @@ export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
       return null;
     }
 
-    // If token changed, update Firestore
-    if (token !== lastSavedToken) {
-      const owner = auth.currentUser?.uid || null;
-      const deviceRef = doc(db, "devices", token);
+    // Token Rotation Logic: Check if token is old or needs update
+    const ownerId = auth.currentUser?.uid;
+    const tokenRef = doc(db, "devices", token);
+    const tokenDoc = await getDoc(tokenRef);
+
+    let needsUpdate = !tokenDoc.exists();
+    if (tokenDoc.exists()) {
+      const data = tokenDoc.data();
+      const lastUpdated = new Date(
+        data.updated_at || data.created_at,
+      ).getTime();
+      if (Date.now() - lastUpdated > TOKEN_REFRESH_INTERVAL) {
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate || token !== lastSavedToken) {
       await setDoc(
-        deviceRef,
+        tokenRef,
         {
-          owner: owner,
+          owner: ownerId || null,
           token: token,
           platform: "web",
-          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
         { merge: true },
       );
       lastSavedToken = token;
-      console.log("Saved/updated device token to Firestore:", token);
-    } else {
-      console.log("Token unchanged.");
+      console.log("FCM Token rotated/updated");
     }
 
     return token;
@@ -72,14 +90,31 @@ export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
   }
 }
 
+/**
+ * Forcefully rotates the current FCM token.
+ */
+export async function rotateFCMToken(vapidKey: string = DEFAULT_VAPID_KEY) {
+  try {
+    const messaging = getMessaging();
+    const currentToken = await getToken(messaging);
+    if (currentToken) {
+      await deleteToken(messaging);
+      console.log("Current token deleted for rotation.");
+    }
+    return await registerForPush(vapidKey);
+  } catch (err) {
+    console.error("Token rotation failed:", err);
+    return null;
+  }
+}
+
 export async function unregisterPush(token: string) {
   if (!token) return;
   try {
     await deleteDoc(doc(db, "devices", token));
     if (lastSavedToken === token) lastSavedToken = null;
-    console.log("Deleted device token doc for", token);
   } catch (err) {
-    console.error("Failed to delete device token doc", err);
+    console.error("Failed to unregister push:", err);
   }
 }
 
@@ -87,37 +122,9 @@ export function onForegroundMessage(callback: (payload: any) => void) {
   try {
     const messaging = getMessaging();
     onMessage(messaging, (payload) => {
-      console.log("Foreground message received:", payload);
       callback(payload);
     });
   } catch (err) {
-    console.warn("onForegroundMessage not available in this environment", err);
+    console.warn("onForegroundMessage not available", err);
   }
-}
-
-export function listenForSubscriptionChange(handler: () => Promise<void>) {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-
-  // Listen to messages from service worker indicating the subscription changed
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    try {
-      const data = event.data || {};
-      if (data && data.type === "PUSH_SUBSCRIPTION_CHANGE") {
-        console.log(
-          "Received PUSH_SUBSCRIPTION_CHANGE from SW; re-registering token",
-        );
-        handler();
-      }
-    } catch (err) {
-      console.warn("Error handling SW message", err);
-    }
-  });
-
-  // Also refresh token when page becomes visible
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      console.log("Page visible — refreshing FCM token");
-      handler();
-    }
-  });
 }
