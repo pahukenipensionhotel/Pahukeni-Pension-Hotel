@@ -1,9 +1,28 @@
 /**
  * Security utilities for masking sensitive data and handling token-related logic.
  */
+/**
+ * Obfuscates a string to prevent plain-text scraping.
+ * This is for "masking" and not a replacement for backend encryption.
+ */
+export function obfuscate(str: string): string {
+  return btoa(str).split("").reverse().join("");
+}
+
+/**
+ * De-obfuscates a string.
+ */
+export function deobfuscate(str: string): string {
+  try {
+    return atob(str.split("").reverse().join(""));
+  } catch (e) {
+    return "";
+  }
+}
 
 /**
  * Masks an email address for display.
+...
  * e.g., "john.doe@example.com" -> "j***e@example.com"
  */
 export function maskEmail(email?: string): string {
@@ -29,13 +48,19 @@ export function maskSecret(secret?: string, visibleChars = 4): string {
  * Note: This is NOT a replacement for Firebase Auth tokens.
  */
 export function generateSessionToken(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return (
+    Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15)
+  );
 }
 
 /**
  * Verifies if a token has expired based on a timestamp.
  */
-export function isTokenExpired(timestamp: string, expiryMinutes: number): boolean {
+export function isTokenExpired(
+  timestamp: string,
+  expiryMinutes: number,
+): boolean {
   const created = new Date(timestamp).getTime();
   const now = new Date().getTime();
   const diffInMinutes = (now - created) / 1000 / 60;

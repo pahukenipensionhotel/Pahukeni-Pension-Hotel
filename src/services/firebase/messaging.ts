@@ -6,9 +6,10 @@ import {
 } from "firebase/messaging";
 import { doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "./client";
+import { deobfuscate } from "../../shared/utils/security";
 
 // VAPID key should be set from your Firebase Console (Cloud Messaging settings)
-const DEFAULT_VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
+const DEFAULT_VAPID_KEY = deobfuscate(""); // Add your obfuscated VAPID key here if needed
 
 let lastSavedToken: string | null = null;
 const TOKEN_REFRESH_INTERVAL = 1000 * 60 * 60 * 24 * 7; // Refresh once a week
