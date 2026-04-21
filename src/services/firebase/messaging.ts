@@ -118,6 +118,33 @@ export async function unregisterPush(token: string) {
   }
 }
 
+export function listenForSubscriptionChange(handler: () => Promise<void>) {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+  // Listen to messages from service worker indicating the subscription changed
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    try {
+      const data = event.data || {};
+      if (data && data.type === "PUSH_SUBSCRIPTION_CHANGE") {
+        console.log(
+          "Received PUSH_SUBSCRIPTION_CHANGE from SW; re-registering token",
+        );
+        handler();
+      }
+    } catch (err) {
+      console.warn("Error handling SW message", err);
+    }
+  });
+
+  // Also refresh token when page becomes visible
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      console.log("Page visible — refreshing FCM token");
+      handler();
+    }
+  });
+}
+
 export function onForegroundMessage(callback: (payload: any) => void) {
   try {
     const messaging = getMessaging();
