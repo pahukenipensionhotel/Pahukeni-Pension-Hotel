@@ -9,7 +9,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { MenuItem, Order, User } from "../../../shared/types/hotel";
+import { MenuItem, Order, User, OrderItem } from "../../../shared/types/hotel";
 import {
   canManagePosMenu,
   canManageInventory as canManageInventoryRole,
@@ -38,18 +38,14 @@ export const POSModule = ({
   orders,
   isAdmin,
   userRole,
-  user,
-  createNotification,
 }: {
   type: "Restaurant" | "Bar";
   menu: MenuItem[];
   orders: Order[];
   isAdmin: boolean;
   userRole?: string;
-  user: User;
-  createNotification: (notif: any) => Promise<void>;
 }) => {
-  const [cart, setCart] = useState<{ item: any; qty: number }[]>([]);
+  const [cart, setCart] = useState<{ item: MenuItem; qty: number }[]>([]);
   const [table, setTable] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -108,7 +104,7 @@ export const POSModule = ({
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
-  const addToCart = (item: any) => {
+  const addToCart = (item: MenuItem) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.item.id === item.id);
       if (existing)
@@ -126,8 +122,7 @@ export const POSModule = ({
       await addDoc(collection(db, "orders"), {
         table_number: table,
         items: cart.map((c) => ({
-          name: c.item.name,
-          price: c.item.price,
+          ...c.item,
           qty: c.qty,
         })),
         total_price: total,
@@ -182,7 +177,7 @@ export const POSModule = ({
     setIsConfirmed(false);
   };
 
-  const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await addDoc(collection(db, "menu_items"), newItem);
@@ -226,7 +221,7 @@ export const POSModule = ({
     estimatedArrival?: string,
   ) => {
     try {
-      const updateData: any = { status: newStatus };
+      const updateData: Partial<Order> = { status: newStatus };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, "orders", orderId), updateData);
 

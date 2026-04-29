@@ -331,6 +331,38 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              <div className="space-y-2 mb-4">
+                <a
+                  href="https://www.facebook.com/share/1BWf2e46F7/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/5 text-white/60 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                >
+                  <img
+                    src={IMAGE_CATALOG.facebook}
+                    className="w-3.5 h-4 object-contain"
+                    alt="Facebook"
+                  />
+                  <span className="text-[10px] font-mono uppercase tracking-widest">
+                    Facebook Page
+                  </span>
+                </a>
+                <a
+                  href="https://wa.me/264818202171"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/5 text-white/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                >
+                  <img
+                    src={IMAGE_CATALOG.whatsapp}
+                    className="w-4 h-4 object-contain"
+                    alt="WhatsApp"
+                  />
+                  <span className="text-[10px] font-mono uppercase tracking-widest">
+                    WhatsApp Chat
+                  </span>
+                </a>
+              </div>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
@@ -440,8 +472,6 @@ export default function App() {
                       orders={orders}
                       isAdmin={isAdmin(user?.role)}
                       userRole={user?.role}
-                      user={user!}
-                      createNotification={createNotification}
                     />
                   )}
                   {activeTab === "laundry" && (

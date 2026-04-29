@@ -1,5 +1,7 @@
 export const IMAGE_CATALOG = {
   logo: "/assets/images/logo/pahukeni_logo.png",
+  facebook: "/assets/images/logo/Facebook%20logo.jpg",
+  whatsapp: "/assets/images/logo/WhatsApp%20logo.png",
   hero: [
     "/assets/images/hero/property-aerial-01.jpg",
     "/assets/images/hero/river-aerial-01.jpg",

@@ -10,7 +10,12 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { Room, User } from "../../../shared/types/hotel";
+import {
+  Room,
+  RoomBooking,
+  User,
+  GlobalPreference,
+} from "../../../shared/types/hotel";
 import { canManageRooms } from "../../../shared/security/authorization";
 import {
   handleFirestoreError,
@@ -40,13 +45,13 @@ const parseNumberInput = (val: string) => {
 export const RoomsModule = ({
   rooms,
   bookings,
-  globalPreferences = [],
+  globalPreferences,
   isAdmin,
   userRole,
 }: {
   rooms: Room[];
-  bookings: any[];
-  globalPreferences?: any[];
+  bookings: RoomBooking[];
+  globalPreferences: GlobalPreference[];
   isAdmin: boolean;
   userRole?: string;
 }) => {
@@ -74,7 +79,7 @@ export const RoomsModule = ({
     setPortfolioServices(globalPreferences);
   }, [globalPreferences]);
 
-  const handleAddRoom = async (e?: React.FormEvent<HTMLFormElement>) => {
+  const handleAddRoom = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     const { prefix, number, ...roomData } = newRoom;
@@ -163,9 +168,7 @@ export const RoomsModule = ({
     return () => clearInterval(interval);
   }, []);
 
-  const handleAddPortfolioService = async (
-    e?: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleAddPortfolioService = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSavingPref) return;
 
@@ -483,8 +486,8 @@ export const RoomsModule = ({
               </thead>
               <tbody className="divide-y divide-black/5">
                 {bookings
-                  .filter((b: any) => b.status === "Pending")
-                  .map((booking: any) => (
+                  .filter((b: RoomBooking) => b.status === "Pending")
+                  .map((booking: RoomBooking) => (
                     <tr
                       key={booking.id}
                       className="hover:bg-gray-50 transition-colors"
@@ -585,8 +588,8 @@ export const RoomsModule = ({
                       </td>
                     </tr>
                   ))}
-                {bookings.filter((b: any) => b.status === "Pending").length ===
-                  0 && (
+                {bookings.filter((b: RoomBooking) => b.status === "Pending")
+                  .length === 0 && (
                   <tr>
                     <td
                       colSpan={6}

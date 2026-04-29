@@ -27,6 +27,8 @@ import {
   ConferenceRoom,
   ConferenceService,
   LaundryService,
+  RoomBooking,
+  ConferenceBooking,
   Notification as HotelNotification,
 } from "../../../shared/types/hotel";
 import {
@@ -72,8 +74,8 @@ export const CustomerPortal = ({
   conferenceServices: ConferenceService[];
   myOrders: Order[];
   myLaundryOrders: LaundryOrder[];
-  myRoomBookings: any[];
-  myConferenceBookings: any[];
+  myRoomBookings: RoomBooking[];
+  myConferenceBookings: ConferenceBooking[];
   globalPreferences?: any[];
 }) => {
   const HERO_SLIDE_INTERVAL_MS = 4000;
@@ -84,7 +86,6 @@ export const CustomerPortal = ({
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showHotelNotifications, setShowHotelNotifications] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<
     { id: string; message: string; type: "info" | "success" | "error" }[]
   >([]);
@@ -141,7 +142,7 @@ export const CustomerPortal = ({
     message: string,
     type: "info" | "success" | "error" = "info",
   ) => {
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -154,7 +155,7 @@ export const CustomerPortal = ({
         customer_email: user.email,
         customer_name: user.name,
         customer_uid: user.id,
-        items: [{ ...item, quantity: 1 }],
+        items: [{ ...item, qty: 1 }],
         total_price: item.price,
         status: "Pending",
         type: item.type,
@@ -241,7 +242,7 @@ export const CustomerPortal = ({
         customer_email: user.email,
         guest_name: user.name,
         customer_uid: user.id,
-        items: [{ ...service, quantity: 1 }],
+        items: [{ ...service, qty: 1 }],
         total_price: service.price,
         status: "Received",
         created_at: new Date().toISOString(),
@@ -290,14 +291,25 @@ export const CustomerPortal = ({
   }, [activeTab]);
 
   useEffect(() => {
-    const allOrders = [...myOrders, ...myLaundryOrders];
+    const allOrders = [
+      ...myOrders,
+      ...myLaundryOrders,
+      ...myRoomBookings,
+      ...myConferenceBookings,
+    ];
     allOrders.forEach((order) => {
       const prevStatus = lastStatuses.current[order.id];
       if (prevStatus && prevStatus !== order.status) {
         const type =
-          "type" in order ? `${order.type} Order` : "Laundry Service";
+          "type" in order
+            ? `${order.type} Order`
+            : "room_number" in order
+              ? "Room Booking"
+              : "room_id" in order
+                ? "Conference Booking"
+                : "Laundry Service";
         const message = `${type} status updated to: ${order.status}`;
-        const id = Math.random().toString(36).substr(2, 9);
+        const id = Math.random().toString(36).substring(2, 9);
 
         setToasts((prev) => [...prev, { id, message, type: "success" }]);
 
@@ -313,7 +325,7 @@ export const CustomerPortal = ({
       lastStatuses.current[order.id] = order.status;
     });
     isInitialLoad.current = false;
-  }, [myOrders, myLaundryOrders]);
+  }, [myOrders, myLaundryOrders, myRoomBookings, myConferenceBookings]);
 
   const getRoomImage = (room: Room) => {
     if (
@@ -328,16 +340,9 @@ export const CustomerPortal = ({
     return getDefaultRoomImage(room);
   };
 
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center font-mono">
-        Loading Portal...
-      </div>
-    );
-
   return (
     <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-      <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
+      <div className="fixed top-4 right-4 z-100 space-y-2 pointer-events-none">
         <AnimatePresence>
           {toasts.map((n) => (
             <motion.div
@@ -345,9 +350,9 @@ export const CustomerPortal = ({
               initial={{ opacity: 0, x: 50, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-black text-white p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 pointer-events-auto min-w-[300px]"
+              className="bg-black text-white p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 pointer-events-auto min-w-75"
             >
-              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
                 <Bell size={16} className="text-white" />
               </div>
               <p className="text-sm font-medium">{n.message}</p>
@@ -480,6 +485,36 @@ export const CustomerPortal = ({
                     <span className="text-sm font-medium">{item.label}</span>
                   </button>
                 ))}
+                <a
+                  href="https://www.facebook.com/share/1BWf2e46F7/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all border border-blue-100/50 mt-2"
+                >
+                  <img
+                    src={LOCAL_ASSETS.facebook}
+                    className="w-5 h-5 object-contain"
+                    alt="Facebook"
+                  />
+                  <span className="text-sm font-medium">
+                    Follow us on Facebook
+                  </span>
+                </a>
+                <a
+                  href="https://wa.me/264818202171"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-100 mt-2"
+                >
+                  <img
+                    src={LOCAL_ASSETS.whatsapp}
+                    className="w-5 h-5 object-contain"
+                    alt="WhatsApp"
+                  />
+                  <span className="text-sm font-medium">
+                    Chat on WhatsApp
+                  </span>
+                </a>
               </div>
               <div className="pt-6 border-t border-black/5">
                 <button
@@ -516,6 +551,34 @@ export const CustomerPortal = ({
               <span className="text-sm font-medium">{item.label}</span>
             </button>
           ))}
+          <div className="pt-4 space-y-2">
+            <a
+              href="https://www.facebook.com/share/1BWf2e46F7/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all border border-blue-100/50"
+            >
+              <img
+                src={LOCAL_ASSETS.facebook}
+                className="w-5 h-5 object-contain"
+                alt="Facebook"
+              />
+              <span className="text-sm font-medium">Follow us on Facebook</span>
+            </a>
+            <a
+              href="https://wa.me/264818202171"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-100"
+            >
+              <img
+                src={LOCAL_ASSETS.whatsapp}
+                className="w-5 h-5 object-contain"
+                alt="WhatsApp"
+              />
+              <span className="text-sm font-medium">Chat on WhatsApp</span>
+            </a>
+          </div>
         </aside>
 
         <main className="lg:col-span-3">
@@ -529,7 +592,7 @@ export const CustomerPortal = ({
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 className="space-y-8"
               >
-                <div className="relative h-[400px] md:h-[500px] rounded-3xl overflow-hidden shadow-2xl group">
+                <div className="relative h-100 md:h-125 rounded-3xl overflow-hidden shadow-2xl group">
                   {heroImages.map((image, idx) => (
                     <motion.img
                       key={image}
@@ -564,7 +627,7 @@ export const CustomerPortal = ({
                     <div className="absolute inset-0 bg-black/40 animate-pulse" />
                   )}
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8 md:p-12">
+                  <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8 md:p-12">
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1012,7 +1075,12 @@ export const CustomerPortal = ({
                     Recent Orders
                   </h2>
                   <div className="space-y-4">
-                    {[...myOrders, ...myLaundryOrders]
+                    {[
+                      ...myOrders,
+                      ...myLaundryOrders,
+                      ...myRoomBookings,
+                      ...myConferenceBookings,
+                    ]
                       .sort(
                         (a, b) =>
                           new Date(b.created_at).getTime() -
@@ -1041,12 +1109,17 @@ export const CustomerPortal = ({
                               <p className="text-sm font-medium">
                                 {"type" in order
                                   ? `${order.type} Order`
-                                  : "Laundry Service"}
+                                  : "room_number" in order
+                                    ? `Room ${order.room_number} Booking`
+                                    : "room_id" in order
+                                      ? "Conference Booking"
+                                      : "Laundry Service"}
                               </p>
                               <p className="text-[10px] font-mono text-black/40 uppercase">
                                 {new Date(order.created_at).toLocaleString()}
                               </p>
-                              {order.estimated_arrival && (
+                              {"estimated_arrival" in order &&
+                                order.estimated_arrival && (
                                 <p className="text-[10px] font-mono text-blue-600 uppercase mt-1 font-bold">
                                   Est.{" "}
                                   {"type" in order ? "Arrival" : "Delivery"}:{" "}
@@ -1075,11 +1148,14 @@ export const CustomerPortal = ({
                           </div>
                         </div>
                       ))}
-                    {myOrders.length === 0 && myLaundryOrders.length === 0 && (
-                      <p className="text-center py-8 text-black/20 font-mono text-sm">
-                        No orders yet
-                      </p>
-                    )}
+                    {myOrders.length === 0 &&
+                      myLaundryOrders.length === 0 &&
+                      myRoomBookings.length === 0 &&
+                      myConferenceBookings.length === 0 && (
+                        <p className="text-center py-8 text-black/20 font-mono text-sm">
+                          No orders yet
+                        </p>
+                      )}
                   </div>
                 </div>
               </motion.div>

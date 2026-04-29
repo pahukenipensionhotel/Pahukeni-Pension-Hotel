@@ -7,14 +7,14 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { motion } from "motion/react";
-import type { Stats } from "../../../shared/types/hotel";
+import type { Stats, RoomBooking } from "../../../shared/types/hotel";
 
 export function Dashboard({
   stats,
   bookings,
 }: {
   stats: Stats | null;
-  bookings: any[];
+  bookings: RoomBooking[];
 }) {
   if (!stats) return null;
 

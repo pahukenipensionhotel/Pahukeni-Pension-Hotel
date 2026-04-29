@@ -56,7 +56,7 @@ export const ConferenceModule = ({
   });
   const conferenceShowcase = LOCAL_ASSETS.showcase.conference[0];
 
-  const handleAddRoom = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await addDoc(collection(db, "conference_rooms"), newRoom);
@@ -72,7 +72,7 @@ export const ConferenceModule = ({
     }
   };
 
-  const handleAddService = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await addDoc(collection(db, "conference_services"), newService);
@@ -83,7 +83,7 @@ export const ConferenceModule = ({
     }
   };
 
-  const handleBooking = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFacility) return;
 

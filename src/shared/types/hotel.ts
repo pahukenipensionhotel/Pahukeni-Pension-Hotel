@@ -17,7 +17,14 @@ export interface Room {
   number: string;
   category: string;
   price: number;
-  status: "Available" | "Occupied" | "Cleaning" | "Maintenance";
+  status:
+    | "Available"
+    | "Occupied"
+    | "Cleaning"
+    | "Maintenance"
+    | "Booked"
+    | "Checked In"
+    | "Checked Out";
   imageUrl?: string;
   description?: string;
   amenities?: string[];
@@ -39,13 +46,17 @@ export interface MenuItem {
   imageUrl?: string;
 }
 
+export interface OrderItem extends MenuItem {
+  qty: number;
+}
+
 export interface Order {
   id: string;
   table_number?: string;
   customer_name?: string;
   customer_email?: string;
   customer_uid?: string;
-  items: any[];
+  items: OrderItem[];
   total_price: number;
   status:
     | "Pending"
@@ -60,24 +71,49 @@ export interface Order {
   estimated_arrival?: string;
 }
 
+export interface LaundryService {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface LaundryOrderItem extends LaundryService {
+  qty: number;
+}
+
 export interface LaundryOrder {
   id: string;
   guest_name: string;
   room_number?: string;
   customer_email?: string;
   customer_uid?: string;
-  items: any[];
+  items: LaundryOrderItem[];
   total_price: number;
   status: "Received" | "In Progress" | "Ready" | "Delivered";
   created_at: string;
   estimated_arrival?: string;
 }
 
-export interface Stats {
-  activeGuests: number;
-  availableRooms: number;
-  pendingLaundry: number;
-  totalRevenue: number;
+export interface RoomBooking {
+  id: string;
+  room_id: string;
+  room_number: string;
+  guest_uid: string;
+  guest_name: string;
+  guest_email?: string;
+  total_price: number;
+  breakfast_included: boolean;
+  additional_services: string[];
+  status:
+    | "Pending"
+    | "Confirmed"
+    | "Checked In"
+    | "Checked Out"
+    | "Cancelled"
+    | "Active";
+  check_in: string;
+  check_out: string;
+  created_at: string;
 }
 
 export interface ConferenceRoom {
@@ -94,10 +130,30 @@ export interface ConferenceService {
   price: number;
 }
 
-export interface LaundryService {
+export interface ConferenceBooking {
+  id: string;
+  room_id: string;
+  client_name: string;
+  client_uid: string;
+  start_time: string;
+  end_time: string;
+  total_price: number;
+  status: "Confirmed" | "Cancelled" | "Completed";
+  created_at: string;
+}
+
+export interface GlobalPreference {
   id: string;
   name: string;
   price: number;
+  created_at?: string;
+}
+
+export interface Stats {
+  activeGuests: number;
+  availableRooms: number;
+  pendingLaundry: number;
+  totalRevenue: number;
 }
 
 export interface Notification {

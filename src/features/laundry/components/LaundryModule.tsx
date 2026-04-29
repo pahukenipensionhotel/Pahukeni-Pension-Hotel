@@ -67,7 +67,7 @@ export const LaundryModule = ({
     });
   };
 
-  const handleAddOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await addDoc(collection(db, "laundry_orders"), {
@@ -116,7 +116,7 @@ export const LaundryModule = ({
     handleAddOrder(e as any);
   };
 
-  const handleAddService = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await addDoc(collection(db, "laundry_services"), newService);

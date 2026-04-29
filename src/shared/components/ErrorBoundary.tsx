@@ -21,7 +21,9 @@ export class ErrorBoundary extends React.Component<
           displayError = parsed;
           isFirestoreError = true;
         }
-      } catch {}
+      } catch {
+        displayError = this.state.error;
+      }
 
       return (
         <div className="min-h-screen bg-red-50 flex items-center justify-center p-8">

@@ -43,7 +43,7 @@ export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
     }
 
     // Attempt to get token
-    let token = await getToken(messaging, {
+    const token = await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: registration,
     });
