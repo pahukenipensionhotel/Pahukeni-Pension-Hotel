@@ -25,6 +25,7 @@ import { LoginPage as AuthLoginPage } from "./features/auth/components/LoginPage
 import { NotificationCenter as NotificationCenterPanel } from "./features/notifications/components/NotificationCenter";
 import { RoomsModule } from "./features/rooms/components/RoomsModule";
 import { ErrorBoundary as AppErrorBoundary } from "./shared/components/ErrorBoundary";
+import { NetworkStatusBanner } from "./shared/components/NetworkStatusBanner";
 import { useHotelData } from "./hooks/useHotelData";
 import { isAdmin, canAccessStaffArea } from "./shared/security/authorization";
 import {
@@ -43,6 +44,7 @@ import { LaundryModule } from "./features/laundry/components/LaundryModule";
 import { ConferenceModule } from "./features/conference/components/ConferenceModule";
 import { StaffModule } from "./features/staff/components/StaffModule";
 import { CustomerPortal } from "./features/dashboard/components/CustomerPortal";
+import { ReportsModule } from "./features/reports/components/ReportsModule";
 
 export default function App() {
   const [toasts, setToasts] = useState<
@@ -164,22 +166,25 @@ export default function App() {
 
   if (!canAccessStaffArea(user.role)) {
     return (
-      <CustomerPortal
-        user={user}
-        notifications={notifications}
-        markHotelNotificationAsRead={markHotelNotificationAsRead}
-        createNotification={createNotification}
-        rooms={rooms}
-        menu={menu}
-        laundryServices={laundryServices}
-        conferenceRooms={conferenceRooms}
-        conferenceServices={conferenceServices}
-        myOrders={orders}
-        myLaundryOrders={laundry}
-        myRoomBookings={bookings}
-        myConferenceBookings={conferenceBookings}
-        globalPreferences={globalPreferences}
-      />
+      <>
+        <NetworkStatusBanner />
+        <CustomerPortal
+          user={user}
+          notifications={notifications}
+          markHotelNotificationAsRead={markHotelNotificationAsRead}
+          createNotification={createNotification}
+          rooms={rooms}
+          menu={menu}
+          laundryServices={laundryServices}
+          conferenceRooms={conferenceRooms}
+          conferenceServices={conferenceServices}
+          myOrders={orders}
+          myLaundryOrders={laundry}
+          myRoomBookings={bookings}
+          myConferenceBookings={conferenceBookings}
+          globalPreferences={globalPreferences}
+        />
+      </>
     );
   }
 
@@ -230,6 +235,7 @@ export default function App() {
 
   return (
     <>
+      <NetworkStatusBanner />
       <AppErrorBoundary>
         <div className="min-h-screen bg-[#E4E3E0] flex flex-col lg:flex-row">
           {/* Mobile Header */}
@@ -495,6 +501,16 @@ export default function App() {
                       createNotification={createNotification}
                     />
                   )}
+                  {activeTab === "reports" && (
+                    <ReportsModule
+                      orders={orders}
+                      laundry={laundry}
+                      bookings={bookings}
+                      conferenceBookings={conferenceBookings}
+                      rooms={rooms}
+                      menu={menu}
+                    />
+                  )}
                   {![
                     "dashboard",
                     "rooms",
@@ -503,6 +519,7 @@ export default function App() {
                     "bar",
                     "laundry",
                     "conference",
+                    "reports",
                   ].includes(activeTab) && (
                     <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
                       <AlertCircle size={48} className="text-black/10 mb-4" />
