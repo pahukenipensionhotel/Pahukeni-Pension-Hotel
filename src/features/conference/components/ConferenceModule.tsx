@@ -219,7 +219,7 @@ export const ConferenceModule = ({
           alt="Conference hall"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/10" />
+        <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/45 to-black/10" />
         <div className="relative flex min-h-[260px] flex-col justify-end p-6 text-white">
           <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
             Meetings & Events

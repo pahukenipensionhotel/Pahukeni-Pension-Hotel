@@ -5,6 +5,7 @@ import {
   X,
   Users,
   User as UserIcon,
+  Calendar,
   Trash2,
 } from "lucide-react";
 import { initializeApp, getApp, deleteApp } from "firebase/app";
@@ -16,27 +17,21 @@ import {
 import { doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import firebaseConfig from "../../../../firebase-applet-config.json";
-import { RoomBooking, User } from "../../../shared/types/hotel";
+import { User } from "../../../shared/types/hotel";
 import { maskEmail } from "../../../shared/utils/security";
 import {
   handleFirestoreError,
   OperationType,
 } from "../../../shared/validation/inputs";
 
-const ROLES: User["role"][] = [
-  "Admin",
-  "Receptionist",
-  "Waiter",
-  "Barman",
-  "Laundry man",
-];
+const ROLES = ["Admin", "Receptionist", "Waiter", "Barman", "Laundry man"];
 
 export const StaffModule = ({
   users,
   bookings,
 }: {
   users: User[];
-  bookings: RoomBooking[];
+  bookings: any[];
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<"staff" | "guests">("staff");
   const [isAdding, setIsAdding] = useState(false);
@@ -57,7 +52,7 @@ export const StaffModule = ({
     try {
       try {
         secondaryApp = initializeApp(firebaseConfig, "SecondaryAuth");
-      } catch {
+      } catch (e) {
         secondaryApp = getApp("SecondaryAuth");
       }
 
@@ -71,12 +66,7 @@ export const StaffModule = ({
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp);
 
-      const memberData = {
-        name: newMember.name,
-        username: newMember.username,
-        email: newMember.email,
-        role: newMember.role,
-      };
+      const { password: _password, ...memberData } = newMember;
       await setDoc(doc(db, "users", userCredential.user.uid), {
         ...memberData,
       });
@@ -92,15 +82,14 @@ export const StaffModule = ({
       alert(
         `${activeSubTab === "staff" ? "Staff member" : "Guest"} registered successfully.`,
       );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (err: any) {
       console.error("Registration error:", err);
-      alert("Failed to register: " + message);
+      alert("Failed to register: " + err.message);
       if (secondaryApp) {
         try {
           await deleteApp(secondaryApp);
-        } catch (deleteError) {
-          console.warn("Failed to clean up secondary auth app:", deleteError);
+        } catch (e) {
+          // Ignore secondary app cleanup errors
         }
       }
     }
@@ -125,7 +114,7 @@ export const StaffModule = ({
 
   const getGuestBooking = (guestEmail?: string, guestId?: string) => {
     return bookings.find(
-      (b) => b.guest_email === guestEmail || b.guest_uid === guestId,
+      (b) => b.customer_email === guestEmail || b.guest_uid === guestId,
     );
   };
 
@@ -192,7 +181,7 @@ export const StaffModule = ({
       </div>
 
       <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse min-w-200">
           <thead>
             <tr className="bg-gray-50 border-b border-black/5">
               <th className="p-6 text-[10px] font-mono uppercase text-black/40">
@@ -241,7 +230,7 @@ export const StaffModule = ({
                       <select
                         value={user.role}
                         onChange={(e) =>
-                          updateRole(user.id, e.target.value as User["role"])
+                          updateRole(user.id, e.target.value as any)
                         }
                         className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer"
                       >
@@ -274,7 +263,7 @@ export const StaffModule = ({
                         <select
                           value={user.role}
                           onChange={(e) =>
-                            updateRole(user.id, e.target.value as User["role"])
+                            updateRole(user.id, e.target.value as any)
                           }
                           className="ml-4 bg-gray-50 px-2 py-1 rounded text-[10px] font-mono uppercase border-none focus:ring-0 cursor-pointer text-black/40 hover:text-black transition-colors"
                         >
@@ -403,7 +392,7 @@ export const StaffModule = ({
                       onChange={(e) =>
                         setNewMember({
                           ...newMember,
-                          role: e.target.value as User["role"],
+                          role: e.target.value as any,
                         })
                       }
                       className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"

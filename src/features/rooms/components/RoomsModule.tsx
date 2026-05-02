@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Plus, Edit2, Trash2, X, ClipboardList } from "lucide-react";
+import { format, parseISO, differenceInDays } from "date-fns";
 import {
   doc,
   updateDoc,
@@ -23,6 +24,7 @@ import {
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
 import { createWorkflowNotification } from "../../notifications/services/notificationWorkflow";
+import { logger } from "../../../shared/utils/logger";
 
 // Helper for local assets in this module (using the same structure as App.tsx used to have)
 const LOCAL_ASSETS = {
@@ -471,6 +473,9 @@ export const RoomsModule = ({
                     Room
                   </th>
                   <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                    Stay Dates
+                  </th>
+                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
                     Services
                   </th>
                   <th className="p-6 text-[10px] font-mono uppercase text-black/40">
@@ -515,6 +520,21 @@ export const RoomsModule = ({
                               Confirmed Unit
                             </span>
                           </div>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">
+                            {format(parseISO(booking.check_in), "MMM dd")} -{" "}
+                            {format(parseISO(booking.check_out), "MMM dd")}
+                          </span>
+                          <span className="text-[10px] text-black/40 font-mono">
+                            {differenceInDays(
+                              parseISO(booking.check_out),
+                              parseISO(booking.check_in),
+                            )}{" "}
+                            Nights
+                          </span>
                         </div>
                       </td>
                       <td className="p-6">
@@ -566,6 +586,19 @@ export const RoomsModule = ({
                                   );
                                 }
                                 await batch.commit();
+
+                                await logger.info(
+                                  "BOOKING",
+                                  "CONFIRM_BOOKING",
+                                  `Staff confirmed booking for ${booking.guest_name} in Room ${booking.room_number}`,
+                                  undefined, // In a real scenario, we'd pass the current staff user ID
+                                  "Staff User",
+                                  {
+                                    bookingId: booking.id,
+                                    roomNumber: booking.room_number,
+                                  },
+                                );
+
                                 await createWorkflowNotification({
                                   userId: booking.guest_uid,
                                   title: "Stay Confirmed!",

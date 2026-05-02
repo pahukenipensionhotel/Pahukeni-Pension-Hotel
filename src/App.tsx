@@ -14,6 +14,7 @@ import {
   Bell,
   AlertCircle,
   CheckCircle2,
+  ScrollText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { signOut } from "firebase/auth";
@@ -45,6 +46,7 @@ import { ConferenceModule } from "./features/conference/components/ConferenceMod
 import { StaffModule } from "./features/staff/components/StaffModule";
 import { CustomerPortal } from "./features/dashboard/components/CustomerPortal";
 import { ReportsModule } from "./features/reports/components/ReportsModule";
+import { SystemLogs } from "./features/reports/components/SystemLogs";
 
 export default function App() {
   const [toasts, setToasts] = useState<
@@ -226,12 +228,23 @@ export default function App() {
       roles: ["Admin", "Receptionist"],
     },
     { id: "reports", label: "Reports", icon: FileText, roles: ["Admin"] },
+    {
+      id: "system_logs",
+      label: "System Logs",
+      icon: ScrollText,
+      roles: ["Admin", "System Developer"],
+      isDeveloperOnly: true,
+    },
     { id: "staff", label: "Staff", icon: Users, roles: ["Admin"] },
   ];
 
-  const filteredMenuItems = menuItems.filter((item) =>
-    item.roles.includes(user?.role || ""),
-  );
+  const filteredMenuItems = menuItems.filter((item) => {
+    const hasRole = item.roles.includes(user?.role || "");
+    if ((item as any).isDeveloperOnly) {
+      return hasRole && user?.email === "btutu427@gmail.com";
+    }
+    return hasRole;
+  });
 
   return (
     <>
@@ -511,6 +524,7 @@ export default function App() {
                       menu={menu}
                     />
                   )}
+                  {activeTab === "system_logs" && <SystemLogs />}
                   {![
                     "dashboard",
                     "rooms",
@@ -520,6 +534,7 @@ export default function App() {
                     "laundry",
                     "conference",
                     "reports",
+                    "system_logs",
                   ].includes(activeTab) && (
                     <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
                       <AlertCircle size={48} className="text-black/10 mb-4" />

@@ -178,15 +178,8 @@ export function useHotelData(
         handleFirestoreError(error, OperationType.GET, "laundry_orders"),
     );
 
-    const bookingsQuery = isStaff
-      ? collection(db, "room_bookings")
-      : query(
-          collection(db, "room_bookings"),
-          where("guest_uid", "==", user.id),
-        );
-
     const unsubBookings = onSnapshot(
-      bookingsQuery,
+      collection(db, "room_bookings"),
       (snapshot) => {
         setBookings(
           snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),

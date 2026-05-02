@@ -6,6 +6,7 @@ export const STAFF_ROLES: User["role"][] = [
   "Waiter",
   "Barman",
   "Laundry man",
+  "System Developer",
 ];
 
 export function isStaffRole(

@@ -6,6 +6,7 @@ export const STAFF_TABS = [
   "laundry",
   "conference",
   "reports",
+  "system_logs",
   "staff",
 ] as const;
 
@@ -28,7 +29,9 @@ export function getHashTab<T extends string>(
 ) {
   if (typeof window === "undefined") return fallback;
 
-  const [hashScope, hashTab] = window.location.hash.replace(/^#\/?/, "").split("/");
+  const [hashScope, hashTab] = window.location.hash
+    .replace(/^#\/?/, "")
+    .split("/");
   return hashScope === scope && validTabs.includes(hashTab as T)
     ? (hashTab as T)
     : fallback;

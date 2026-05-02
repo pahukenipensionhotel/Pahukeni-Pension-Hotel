@@ -165,7 +165,7 @@ export function LoginPage() {
             transition={{ duration: 0.55, ease: "easeOut" }}
           />
         ))}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/35 to-black/10" />
+        <div className="absolute inset-0 bg-linear-to-r from-black/60 via-black/35 to-black/10" />
         <div className="absolute inset-x-0 bottom-0 p-10 text-white">
           <p className="text-xs uppercase tracking-[0.35em] text-white/70">
             Pahukeni Pension Hotel

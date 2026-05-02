@@ -45,6 +45,8 @@ import { NotificationService } from "../../../services/notificationService";
 import { NotificationCenter as NotificationCenterPanel } from "../../notifications/components/NotificationCenter";
 import { RoomDetailsModal } from "../../rooms/components/RoomDetailsModal";
 
+import { logger } from "../../../shared/utils/logger";
+
 const LOCAL_ASSETS = IMAGE_CATALOG;
 
 export const CustomerPortal = ({
@@ -183,7 +185,12 @@ export const CustomerPortal = ({
 
   const handleRoomCheckIn = async (
     room: Room,
-    options: { includeBreakfast: boolean; selectedAddons: string[] },
+    options: {
+      includeBreakfast: boolean;
+      selectedAddons: string[];
+      checkInDate: string;
+      checkOutDate: string;
+    },
   ) => {
     try {
       const addonFromRoom = (room.additionalServices || [])
@@ -192,9 +199,17 @@ export const CustomerPortal = ({
       const addonFromGlobal = (globalPreferences || [])
         .filter((s) => options.selectedAddons.includes(s.name))
         .reduce((sum, s) => sum + s.price, 0);
+
+      const start = new Date(options.checkInDate);
+      const end = new Date(options.checkOutDate);
+      const nights = Math.max(
+        1,
+        Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+
       const finalPrice =
-        room.price +
-        (options.includeBreakfast ? room.breakfastPrice || 0 : 0) +
+        room.price * nights +
+        (options.includeBreakfast ? (room.breakfastPrice || 0) * nights : 0) +
         addonFromRoom +
         addonFromGlobal;
 
@@ -208,10 +223,24 @@ export const CustomerPortal = ({
         breakfast_included: options.includeBreakfast,
         additional_services: options.selectedAddons,
         status: "Pending",
-        check_in: new Date().toISOString(),
-        check_out: new Date(new Date().getTime() + 86400000).toISOString(),
+        check_in: new Date(options.checkInDate).toISOString(),
+        check_out: new Date(options.checkOutDate).toISOString(),
         created_at: new Date().toISOString(),
       });
+
+      await logger.info(
+        "BOOKING",
+        "NEW_BOOKING_REQUEST",
+        `${user.name} requested booking for Room ${room.number}`,
+        user.id,
+        user.name,
+        {
+          roomId: room.id,
+          checkIn: options.checkInDate,
+          checkOut: options.checkOutDate,
+          price: finalPrice,
+        },
+      );
 
       try {
         await createNotification({
@@ -338,6 +367,21 @@ export const CustomerPortal = ({
     }
 
     return getDefaultRoomImage(room);
+  };
+
+  const isRoomCurrentlyBooked = (roomId: string) => {
+    const now = new Date();
+    return myRoomBookings.some((b) => {
+      if (b.room_id !== roomId || b.status === "Cancelled") return false;
+      const start = new Date(b.check_in);
+      const end = new Date(b.check_out);
+      return now >= start && now < end;
+    });
+  };
+
+  const getRoomDisplayStatus = (room: Room) => {
+    if (isRoomCurrentlyBooked(room.id)) return "Currently Booked";
+    return room.status;
   };
 
   return (
@@ -511,9 +555,7 @@ export const CustomerPortal = ({
                     className="w-5 h-5 object-contain"
                     alt="WhatsApp"
                   />
-                  <span className="text-sm font-medium">
-                    Chat on WhatsApp
-                  </span>
+                  <span className="text-sm font-medium">Chat on WhatsApp</span>
                 </a>
               </div>
               <div className="pt-6 border-t border-black/5">
@@ -731,7 +773,7 @@ export const CustomerPortal = ({
                         }}
                         className="group cursor-pointer bg-white rounded-3xl p-4 border border-black/5 shadow-sm hover:shadow-xl transition-all"
                       >
-                        <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-6 relative shadow-md bg-black">
+                        <div className="aspect-4/5 rounded-2xl overflow-hidden mb-6 relative shadow-md bg-black">
                           <img
                             loading="lazy"
                             src={getRoomImage(room)}
@@ -739,7 +781,7 @@ export const CustomerPortal = ({
                             className="w-full h-full object-cover group-hover:scale-110 group-hover:opacity-60 transition-all duration-700"
                             referrerPolicy="no-referrer"
                           />
-                          <div className="absolute inset-0 flex flex-col justify-end p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+                          <div className="absolute inset-0 flex flex-col justify-end p-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-linear-to-t from-black/80 via-black/20 to-transparent">
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="px-3 py-1 bg-white text-black font-black rounded text-[9px] font-mono uppercase tracking-[0.3em]">
@@ -758,7 +800,14 @@ export const CustomerPortal = ({
                         <div className="flex justify-between items-center px-1">
                           <div className="flex flex-col">
                             <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-black/30 mb-1">
-                              Standard Suite
+                              {getRoomDisplayStatus(room) ===
+                              "Currently Booked" ? (
+                                <span className="text-orange-600 font-bold">
+                                  Currently Booked
+                                </span>
+                              ) : (
+                                `${room.category} Suite`
+                              )}
                             </span>
                             <h4 className="text-base font-serif font-bold text-[#141414] tracking-tight italic">
                               Registry Unit {room.number}
@@ -827,7 +876,7 @@ export const CustomerPortal = ({
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <div className="flex items-center gap-2 mb-1.5">
-                              <span className="px-2 py-0.5 bg-black/[0.04] border border-black/5 rounded-[4px] text-[8px] font-mono text-black/40 font-bold uppercase tracking-widest shadow-inner">
+                              <span className="px-2 py-0.5 bg-black/4 border border-black/5 rounded-sm text-[8px] font-mono text-black/40 font-bold uppercase tracking-widest shadow-inner">
                                 {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
                               </span>
                               <span className="text-[10px] font-mono text-black/20 font-medium uppercase tracking-[0.2em] border-l border-black/5 pl-2">
@@ -839,12 +888,13 @@ export const CustomerPortal = ({
                             </h3>
                             <p
                               className={`text-[9px] font-mono font-medium uppercase tracking-[0.15em] ${
-                                room.status === "Available"
+                                getRoomDisplayStatus(room) === "Available"
                                   ? "text-emerald-600"
                                   : "text-orange-600"
                               }`}
                             >
-                              {room.category} Standard • {room.status}
+                              {room.category} Standard •{" "}
+                              {getRoomDisplayStatus(room)}
                             </p>
                           </div>
                           <div className="text-right">
@@ -871,12 +921,10 @@ export const CustomerPortal = ({
                             View Details
                           </button>
                           <button
-                            disabled={room.status !== "Available"}
-                            className="flex-1 py-3 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-30 hover:bg-black/90 transition-colors"
+                            onClick={() => setSelectedRoom(room)}
+                            className="flex-1 py-3 bg-black text-white rounded-xl text-sm font-medium hover:bg-black/90 transition-colors"
                           >
-                            {room.status === "Available"
-                              ? "Book Now"
-                              : "Unavailable"}
+                            Book Now
                           </button>
                         </div>
                       </div>
@@ -899,7 +947,7 @@ export const CustomerPortal = ({
                       key={item.id}
                       className="bg-white p-4 rounded-2xl border border-black/5 flex gap-4 shadow-sm"
                     >
-                      <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                      <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0">
                         <img
                           loading="lazy"
                           src={getMenuImage(item)}
@@ -1120,12 +1168,12 @@ export const CustomerPortal = ({
                               </p>
                               {"estimated_arrival" in order &&
                                 order.estimated_arrival && (
-                                <p className="text-[10px] font-mono text-blue-600 uppercase mt-1 font-bold">
-                                  Est.{" "}
-                                  {"type" in order ? "Arrival" : "Delivery"}:{" "}
-                                  {order.estimated_arrival}
-                                </p>
-                              )}
+                                  <p className="text-[10px] font-mono text-blue-600 uppercase mt-1 font-bold">
+                                    Est.{" "}
+                                    {"type" in order ? "Arrival" : "Delivery"}:{" "}
+                                    {order.estimated_arrival}
+                                  </p>
+                                )}
                             </div>
                           </div>
                           <div className="text-right">
@@ -1167,6 +1215,7 @@ export const CustomerPortal = ({
           {selectedRoom && (
             <RoomDetailsModal
               selectedRoom={selectedRoom}
+              roomBookings={myRoomBookings}
               onClose={() => setSelectedRoom(null)}
               onCheckIn={handleRoomCheckIn}
               globalPreferences={globalPreferences}

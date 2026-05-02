@@ -7,7 +7,8 @@ export interface User {
     | "Waiter"
     | "Barman"
     | "Laundry man"
-    | "Customer";
+    | "Customer"
+    | "System Developer";
   name: string;
   email?: string;
 }
