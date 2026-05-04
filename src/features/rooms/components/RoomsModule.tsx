@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Edit2, Trash2, X, ClipboardList } from "lucide-react";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { Plus, Edit2, Trash2, X, ClipboardList, Search, Receipt } from "lucide-react";
+import { format, parseISO, differenceInDays, isSameDay, startOfToday, addDays } from "date-fns";
 import {
   doc,
   updateDoc,
@@ -16,6 +16,7 @@ import {
   RoomBooking,
   User,
   GlobalPreference,
+  Folio,
 } from "../../../shared/types/hotel";
 import { canManageRooms } from "../../../shared/security/authorization";
 import {
@@ -25,6 +26,10 @@ import {
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
 import { createWorkflowNotification } from "../../notifications/services/notificationWorkflow";
 import { logger } from "../../../shared/utils/logger";
+
+import { BookingModal } from "./BookingModal";
+import { BookingCalendar } from "./BookingCalendar";
+import { FolioModal } from "./FolioModal";
 
 // Helper for local assets in this module (using the same structure as App.tsx used to have)
 const LOCAL_ASSETS = {
@@ -39,6 +44,8 @@ const LOCAL_ASSETS = {
   },
 };
 
+const conferenceShowcase = IMAGE_CATALOG.showcase.conference[0];
+
 const parseNumberInput = (val: string) => {
   const parsed = parseFloat(val);
   return isNaN(parsed) ? 0 : parsed;
@@ -48,17 +55,20 @@ export const RoomsModule = ({
   rooms,
   bookings,
   globalPreferences,
+  folios,
   isAdmin,
   userRole,
 }: {
   rooms: Room[];
   bookings: RoomBooking[];
   globalPreferences: GlobalPreference[];
+  folios: Folio[];
   isAdmin: boolean;
   userRole?: string;
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [selectedFolioBooking, setSelectedFolioBooking] = useState<RoomBooking | null>(null);
   const [portfolioServices, setPortfolioServices] =
     useState<any[]>(globalPreferences);
   const [newRoom, setNewRoom] = useState({
@@ -74,6 +84,34 @@ export const RoomsModule = ({
     imageUrl: LOCAL_ASSETS.rooms.single,
     prefix: "SR",
   });
+
+  const [filterCheckIn, setFilterCheckIn] = useState("");
+  const [filterCheckOut, setFilterCheckOut] = useState("");
+  const [selectedBookingRoom, setSelectedBookingRoom] = useState<Room | null>(null);
+  const [bookingSearch, setBookingSearch] = useState("");
+
+  const filteredRooms = useMemo(() => {
+    if (!filterCheckIn || !filterCheckOut) return rooms;
+
+    const start = parseISO(filterCheckIn);
+    const end = parseISO(filterCheckOut);
+
+    return rooms.filter((room) => {
+      // Check for any conflicting bookings
+      const hasConflict = bookings.some((booking) => {
+        if (booking.room_id !== room.id || booking.status === "Cancelled")
+          return false;
+        const bStart = parseISO(booking.check_in.split("T")[0]);
+        const bEnd = parseISO(booking.check_out.split("T")[0]);
+        return (
+          (start < bEnd && end > bStart) || // Overlap
+          booking.status === "Checked In" ||
+          booking.status === "Active"
+        );
+      });
+      return !hasConflict;
+    });
+  }, [rooms, bookings, filterCheckIn, filterCheckOut]);
 
   const canManage = canManageRooms(userRole as User["role"] | undefined);
 
@@ -153,8 +191,9 @@ export const RoomsModule = ({
   };
 
   const [activeSubTab, setActiveSubTab] = useState<
-    "rooms" | "bookings" | "services"
+    "rooms" | "bookings" | "services" | "calendar"
   >("rooms");
+
   const [newPref, setNewPref] = useState({ name: "", price: "" });
   const [isAddingPref, setIsAddingPref] = useState(false);
   const [isSavingPref, setIsSavingPref] = useState(false);
@@ -255,7 +294,14 @@ export const RoomsModule = ({
                 ${activeSubTab === "bookings" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
               Daily Bookings (
-              {bookings.filter((b) => b.status === "Pending").length})
+              {bookings.filter((b) => b.status === "Pending" || b.status === "Checked In").length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab("calendar")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+                ${activeSubTab === "calendar" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+            >
+              Live Calendar
             </button>
             <button
               onClick={() => setActiveSubTab("services")}
@@ -303,8 +349,65 @@ export const RoomsModule = ({
       </div>
 
       {activeSubTab === "rooms" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {rooms.map((room) => (
+        <div className="space-y-6">
+          <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-[260px] bg-white">
+            <img
+              loading="lazy"
+              src={conferenceShowcase}
+              alt="Conference hall"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/45 to-black/10" />
+            <div className="relative flex min-h-[260px] flex-col justify-end p-6 text-white">
+              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
+                Meetings & Events
+              </p>
+              <h3 className="mt-2 text-3xl font-serif italic">
+                Conference Facilities
+              </h3>
+              <p className="mt-2 max-w-xl text-sm text-white/80">
+                The conference module now uses the on-site hall photography so the
+                booking experience reflects the real venue.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-black/5 shadow-sm flex flex-col md:flex-row items-end gap-4">
+            <div className="flex-1 space-y-2">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-black/40">
+                Check-In Date
+              </label>
+              <input
+                type="date"
+                value={filterCheckIn}
+                onChange={(e) => setFilterCheckIn(e.target.value)}
+                className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
+              />
+            </div>
+            <div className="flex-1 space-y-2">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-black/40">
+                Check-Out Date
+              </label>
+              <input
+                type="date"
+                value={filterCheckOut}
+                onChange={(e) => setFilterCheckOut(e.target.value)}
+                className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
+              />
+            </div>
+            <button
+              onClick={() => {
+                setFilterCheckIn("");
+                setFilterCheckOut("");
+              }}
+              className="px-6 py-3 bg-black/5 text-black/40 rounded-xl hover:bg-black/10 transition-colors text-xs font-mono uppercase tracking-widest"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredRooms.map((room) => (
             <motion.div
               key={room.id}
               whileHover={{ y: -4 }}
@@ -434,11 +537,7 @@ export const RoomsModule = ({
                 <div className="flex gap-2">
                   {room.status === "Available" ? (
                     <button
-                      onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), {
-                          status: "Occupied",
-                        });
-                      }}
+                      onClick={() => setSelectedBookingRoom(room)}
                       className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
                     >
                       Check In
@@ -460,39 +559,61 @@ export const RoomsModule = ({
             </motion.div>
           ))}
         </div>
+      </div>
       ) : activeSubTab === "bookings" ? (
-        <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-[#F9F9F8] border-b border-black/5">
-                <tr>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Guest
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Room
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Stay Dates
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Services
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Total Price
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                    Status
-                  </th>
-                  <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5">
-                {bookings
-                  .filter((b: RoomBooking) => b.status === "Pending")
-                  .map((booking: RoomBooking) => (
+        <div className="space-y-6">
+          <div className="bg-white p-4 rounded-2xl border border-black/5 flex items-center gap-3">
+            <Search className="text-black/20" size={18} />
+            <input
+              type="text"
+              placeholder="Search by Guest Name or Room Number..."
+              value={bookingSearch}
+              onChange={(e) => setBookingSearch(e.target.value)}
+              className="flex-1 bg-transparent border-none outline-none text-sm"
+            />
+          </div>
+
+          <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-[#F9F9F8] border-b border-black/5">
+                  <tr>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Guest
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Room
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Stay Dates
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Services
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Total Price
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
+                      Status
+                    </th>
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/5">
+                  {bookings
+                    .filter((b: RoomBooking) => {
+                      const search = bookingSearch.toLowerCase();
+                      const matchesSearch =
+                        b.guest_name.toLowerCase().includes(search) ||
+                        b.room_number.toLowerCase().includes(search);
+                      return (
+                        (b.status === "Pending" || b.status === "Checked In") &&
+                        matchesSearch
+                      );
+                    })
+                    .map((booking: RoomBooking) => (
                     <tr
                       key={booking.id}
                       className="hover:bg-gray-50 transition-colors"
@@ -569,7 +690,14 @@ export const RoomsModule = ({
                       <td className="p-6 text-right">
                         <div className="flex justify-end gap-2">
                           <button
-                            onClick={async () => {
+                            onClick={() => setSelectedFolioBooking(booking)}
+                            className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center gap-2"
+                          >
+                            <Receipt size={14} /> Manage Folio
+                          </button>
+                          {booking.status === "Pending" && (
+                            <button
+                              onClick={async () => {
                               try {
                                 const batch = writeBatch(db);
                                 batch.update(
@@ -617,6 +745,7 @@ export const RoomsModule = ({
                           >
                             Confirm & Notify
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -625,7 +754,7 @@ export const RoomsModule = ({
                   .length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="p-12 text-center text-black/20 font-mono text-sm italic"
                     >
                       No pending booking requests.
@@ -636,6 +765,9 @@ export const RoomsModule = ({
             </table>
           </div>
         </div>
+        </div>
+      ) : activeSubTab === "calendar" ? (
+        <BookingCalendar rooms={rooms} bookings={bookings} />
       ) : (
         <div className="space-y-6">
           <div className="bg-blue-50 border border-blue-100 p-6 rounded-3xl flex items-center gap-6">
@@ -706,7 +838,6 @@ export const RoomsModule = ({
                   <X size={24} className="text-black/40" />
                 </button>
               </div>
-
               <form className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
                 <div className="space-y-6">
                   <div>
@@ -1103,6 +1234,22 @@ export const RoomsModule = ({
               </form>
             </motion.div>
           </div>
+        )}
+
+        {selectedBookingRoom && (
+          <BookingModal
+            room={selectedBookingRoom}
+            onClose={() => setSelectedBookingRoom(null)}
+            onSuccess={(msg) => alert(msg)}
+          />
+        )}
+        {selectedFolioBooking && (
+          <FolioModal
+            booking={selectedFolioBooking}
+            folio={folios.find(f => f.booking_id === selectedFolioBooking.id)}
+            rooms={rooms}
+            onClose={() => setSelectedFolioBooking(null)}
+          />
         )}
       </AnimatePresence>
     </div>

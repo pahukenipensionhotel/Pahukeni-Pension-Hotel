@@ -6,7 +6,6 @@ export const IMAGE_CATALOG = {
     "/assets/images/hero/property-aerial-01.jpg",
     "/assets/images/hero/river-aerial-01.jpg",
     "/assets/images/hero/river-aerial-02.jpg",
-    "/assets/images/hero/river-aerial-03.jpg",
     "/assets/images/hero/river-garden-01.jpg",
     "/assets/images/hero/aerial-01.jpg",
     "/assets/images/hero/aerial-02.jpg",

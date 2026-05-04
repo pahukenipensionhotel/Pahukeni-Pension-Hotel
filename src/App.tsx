@@ -79,6 +79,8 @@ export default function App() {
     conferenceServices,
     conferenceBookings,
     globalPreferences,
+    folios,
+    expenditures,
     notifications,
     stats,
     createNotification,
@@ -227,7 +229,12 @@ export default function App() {
       icon: Calendar,
       roles: ["Admin", "Receptionist"],
     },
-    { id: "reports", label: "Reports", icon: FileText, roles: ["Admin"] },
+    {
+      id: "reports",
+      label: "Reports",
+      icon: FileText,
+      roles: ["Admin", "Receptionist", "Waiter", "Barman", "Laundry man"],
+    },
     {
       id: "system_logs",
       label: "System Logs",
@@ -477,6 +484,7 @@ export default function App() {
                       rooms={rooms}
                       bookings={bookings}
                       globalPreferences={globalPreferences}
+                      folios={folios}
                       isAdmin={isAdmin(user?.role)}
                       userRole={user?.role}
                     />
@@ -522,6 +530,9 @@ export default function App() {
                       conferenceBookings={conferenceBookings}
                       rooms={rooms}
                       menu={menu}
+                      folios={folios}
+                      expenditures={expenditures}
+                      user={user}
                     />
                   )}
                   {activeTab === "system_logs" && <SystemLogs />}

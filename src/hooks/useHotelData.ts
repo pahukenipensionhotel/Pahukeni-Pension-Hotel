@@ -18,6 +18,8 @@ import {
   LaundryOrder,
   User,
   Notification as HotelNotification,
+  Folio,
+  HotelExpenditure,
 } from "../shared/types/hotel";
 import { isStaffRole } from "../shared/security/roles";
 import {
@@ -59,6 +61,8 @@ export function useHotelData(
   const [conferenceServices, setConferenceServices] = useState<any[]>([]);
   const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
   const [globalPreferences, setGlobalPreferences] = useState<any[]>([]);
+  const [folios, setFolios] = useState<Folio[]>([]);
+  const [expenditures, setExpenditures] = useState<HotelExpenditure[]>([]);
   const [notifications, setHotelNotifications] = useState<HotelNotification[]>(
     [],
   );
@@ -187,6 +191,28 @@ export function useHotelData(
       },
       (error) =>
         handleFirestoreError(error, OperationType.GET, "room_bookings"),
+    );
+
+    const unsubFolios = onSnapshot(
+      collection(db, "folios"),
+      (snapshot) => {
+        setFolios(
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Folio),
+        );
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, "folios"),
+    );
+
+    const unsubExpenditures = onSnapshot(
+      collection(db, "expenditures"),
+      (snapshot) => {
+        setExpenditures(
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as HotelExpenditure,
+          ),
+        );
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, "expenditures"),
     );
 
     let unsubUsers = () => {};
@@ -346,6 +372,7 @@ export function useHotelData(
       unsubOrders();
       unsubLaundry();
       unsubBookings();
+      unsubExpenditures();
       unsubUsers();
       unsubConf();
       unsubLaundryServices();
@@ -385,14 +412,28 @@ export function useHotelData(
             item.imageUrl !== getDefaultMenuImage(item),
         );
         for (const item of menuItemsToUpdate) {
+          if (!canManagePosMenu(item.type, user.role)) continue;
+          // Skip legacy/incomplete docs that would fail firestore rule validation on update.
+          if (
+            !item.name ||
+            typeof item.category !== "string" ||
+            (item.type !== "Restaurant" && item.type !== "Bar") ||
+            (item.status !== "Available" && item.status !== "Out of Stock") ||
+            typeof item.price !== "number"
+          ) {
+            continue;
+          }
           const newUrl = getDefaultMenuImage(item);
-          if (newUrl !== item.imageUrl)
+          if (newUrl !== item.imageUrl) {
             await updateDoc(doc(db, "menu_items", item.id), {
               imageUrl: newUrl,
             });
+          }
         }
       };
-      migrateImages();
+      migrateImages().catch((err) => {
+        console.warn("Skipping menu image migration due to permissions.", err);
+      });
     }
   }, [authReady, menu, rooms, user]);
 
@@ -444,6 +485,8 @@ export function useHotelData(
     conferenceServices,
     conferenceBookings,
     globalPreferences,
+    folios,
+    expenditures,
     notifications,
     stats,
     createNotification,

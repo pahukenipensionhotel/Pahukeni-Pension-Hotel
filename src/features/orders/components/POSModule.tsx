@@ -179,6 +179,10 @@ export const POSModule = ({
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageMenu && !isAdmin) {
+      alert("You do not have permission to add menu items.");
+      return;
+    }
     try {
       await addDoc(collection(db, "menu_items"), newItem);
       setIsAdding(false);
@@ -193,6 +197,16 @@ export const POSModule = ({
         minStock: 5,
       });
     } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes("Missing or insufficient permissions") ||
+          err.message.includes("permission-denied"))
+      ) {
+        alert(
+          "Permission denied while creating menu item. Deploy latest Firestore rules and verify role access.",
+        );
+        return;
+      }
       handleFirestoreError(err, OperationType.CREATE, "menu_items");
     }
   };
@@ -211,6 +225,16 @@ export const POSModule = ({
         item.status === "Available" ? "Out of Stock" : "Available";
       await updateDoc(doc(db, "menu_items", item.id), { status: newStatus });
     } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes("Missing or insufficient permissions") ||
+          err.message.includes("permission-denied"))
+      ) {
+        alert(
+          "Permission denied while updating menu item. Deploy latest Firestore rules and verify role access.",
+        );
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, "menu_items");
     }
   };

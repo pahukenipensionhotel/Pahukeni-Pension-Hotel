@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { doc, getDocFromServer, getFirestore } from "firebase/firestore";
+import { doc, getDocFromServer, initializeFirestore } from "firebase/firestore";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { deobfuscate } from "../../shared/utils/security";
 
@@ -49,7 +49,13 @@ if (typeof window !== "undefined") {
   }
 }
 
-export const db = getFirestore(app, deobfuscate(_c.f));
+export const db = initializeFirestore(
+  app,
+  {
+    experimentalForceLongPolling: true,
+  },
+  deobfuscate(_c.f),
+);
 export const auth = getAuth(app);
 
 async function testConnection() {

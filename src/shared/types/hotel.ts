@@ -102,6 +102,9 @@ export interface RoomBooking {
   guest_uid: string;
   guest_name: string;
   guest_email?: string;
+  guest_id_number?: string;
+  source?: "Phone" | "WhatsApp" | "Walk-in" | "Online";
+  payment_method?: "Cash" | "Card";
   total_price: number;
   breakfast_included: boolean;
   additional_services: string[];
@@ -115,6 +118,46 @@ export interface RoomBooking {
   check_in: string;
   check_out: string;
   created_at: string;
+  folio_id?: string;
+}
+
+export interface HotelExpenditure {
+  id: string;
+  date: string;
+  category: string;
+  item: string;
+  amount: number;
+  payment_method: "Cash" | "Card";
+  vendor?: string;
+  notes?: string;
+  added_by?: string;
+  created_at: string;
+}
+
+export interface FolioCharge {
+  id: string;
+  date: string;
+  category: "Bar" | "Restaurant" | "Other";
+  description: string;
+  amount: number;
+  reference?: string;
+  staff_id?: string;
+  staff_name?: string;
+  timestamp: string;
+}
+
+export interface Folio {
+  id: string;
+  booking_id: string;
+  charges: FolioCharge[];
+  deposits: {
+    amount: number;
+    date: string;
+    description: string;
+  }[];
+  total_charges: number;
+  total_deposits: number;
+  balance_due: number;
 }
 
 export interface ConferenceRoom {

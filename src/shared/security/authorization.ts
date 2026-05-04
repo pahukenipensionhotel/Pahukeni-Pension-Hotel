@@ -25,11 +25,8 @@ export function canManagePosMenu(
   type: "Restaurant" | "Bar",
   role?: User["role"] | null,
 ) {
-  return (
-    role === "Admin" ||
-    (type === "Restaurant" && role === "Waiter") ||
-    (type === "Bar" && role === "Barman")
-  );
+  void type;
+  return isStaffRole(role);
 }
 
 export function canManageInventory(role?: User["role"] | null) {
