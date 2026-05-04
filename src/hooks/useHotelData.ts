@@ -385,56 +385,9 @@ export function useHotelData(
   }, [user]);
 
   useEffect(() => {
-    if (authReady && user && rooms.length > 0) {
-      const migrateImages = async () => {
-        if (!canManageRooms(user.role)) return;
-        const roomsToUpdate = rooms.filter(
-          (r) =>
-            !r.imageUrl ||
-            r.imageUrl.includes(" ") ||
-            r.imageUrl.includes("single room") ||
-            r.imageUrl.includes("double room") ||
-            r.imageUrl.startsWith("https://images.pexels.com") ||
-            r.imageUrl.includes("picsum.photos") ||
-            r.imageUrl.startsWith("/rooms/"),
-        );
-        for (const room of roomsToUpdate) {
-          const newUrl = getDefaultRoomImage(room);
-          if (newUrl !== room.imageUrl)
-            await updateDoc(doc(db, "rooms", room.id), { imageUrl: newUrl });
-        }
-        const menuItemsToUpdate = menu.filter(
-          (item) =>
-            !item.imageUrl ||
-            item.imageUrl.includes("picsum.photos") ||
-            item.imageUrl.includes("pexels.com") ||
-            item.imageUrl.endsWith(".svg") ||
-            item.imageUrl !== getDefaultMenuImage(item),
-        );
-        for (const item of menuItemsToUpdate) {
-          if (!canManagePosMenu(item.type, user.role)) continue;
-          // Skip legacy/incomplete docs that would fail firestore rule validation on update.
-          if (
-            !item.name ||
-            typeof item.category !== "string" ||
-            (item.type !== "Restaurant" && item.type !== "Bar") ||
-            (item.status !== "Available" && item.status !== "Out of Stock") ||
-            typeof item.price !== "number"
-          ) {
-            continue;
-          }
-          const newUrl = getDefaultMenuImage(item);
-          if (newUrl !== item.imageUrl) {
-            await updateDoc(doc(db, "menu_items", item.id), {
-              imageUrl: newUrl,
-            });
-          }
-        }
-      };
-      migrateImages().catch((err) => {
-        console.warn("Skipping menu image migration due to permissions.", err);
-      });
-    }
+    // Client-side image migration has been intentionally removed.
+    // Image/asset migrations should run via an admin-controlled process (e.g. Cloud Function or a CLI script)
+    // to avoid accidental permission errors from client environments.
   }, [authReady, menu, rooms, user]);
 
   const stats = useMemo(

@@ -19,10 +19,7 @@ import {
   OperationType,
   sanitizeText,
 } from "../../../shared/validation/inputs";
-import {
-  IMAGE_CATALOG,
-  getMenuImage,
-} from "../../../shared/assets/imageCatalog";
+import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
 import {
   notifyRole,
   notifyUser,
@@ -470,29 +467,28 @@ export const POSModule = ({
                         disabled={item.status === "Out of Stock"}
                         className="w-full h-full text-left"
                       >
-                        <div className="mb-4 overflow-hidden rounded-2xl border border-black/5 bg-[#F5F5F0] aspect-4/3">
-                          <img
-                            loading="lazy"
-                            src={getMenuImage(item)}
-                            alt={item.name}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
+                        <div className="mb-1 flex justify-between items-start">
+                          <div>
+                            <p className="text-[10px] font-mono text-black/30 uppercase mb-1">
+                              {item.category}
+                            </p>
+                            <p className="font-medium text-[#141414] group-hover:text-black transition-colors">
+                              {item.name}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            {item.status === "Out of Stock" && (
+                              <span className="text-[8px] font-mono bg-red-50 text-red-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                Out of Stock
+                              </span>
+                            )}
+                            <p className="text-sm font-serif italic mt-1">
+                              N$ {item.price}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex justify-between items-start mb-1">
-                          <p className="text-[10px] font-mono text-black/30 uppercase">
-                            {item.category}
-                          </p>
-                          {item.status === "Out of Stock" && (
-                            <span className="text-[8px] font-mono bg-red-50 text-red-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">
-                              Out of Stock
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-medium text-[#141414] group-hover:text-black transition-colors">
-                          {item.name}
-                        </p>
-                        <p className="text-sm font-serif italic mt-2">
-                          N$ {item.price}
+                        <p className="text-[10px] text-black/40 mt-2">
+                          {item.type}
                         </p>
                       </button>
                     </motion.div>

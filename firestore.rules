@@ -267,9 +267,15 @@ service cloud.firestore {
 
     match /menu_items/{itemId} {
       allow read: if isAuthenticated();
-      allow create: if isValidMenuItem(request.resource.data) && isStaff();
-      allow update: if isValidMenuItem(request.resource.data) && isStaff();
-      allow delete: if isStaff();
+      // Allow create/update by Admins or recognized staff (role stored in /users) OR by users with a 'staff' custom claim
+      allow create: if isValidMenuItem(request.resource.data) && (
+        isAdmin() || isStaff() || (request.auth != null && request.auth.token.staff == true)
+      );
+      allow update: if isValidMenuItem(request.resource.data) && (
+        isAdmin() || isStaff() || (request.auth != null && request.auth.token.staff == true)
+      );
+      // Deletion is restricted to Admins for safety
+      allow delete: if isAdmin();
     }
 
     match /orders/{orderId} {
@@ -391,4 +397,3 @@ service cloud.firestore {
     }
   }
 }
-

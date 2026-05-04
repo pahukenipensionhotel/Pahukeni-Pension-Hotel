@@ -34,7 +34,6 @@ import {
 import {
   IMAGE_CATALOG,
   getDefaultRoomImage,
-  getMenuImage,
 } from "../../../shared/assets/imageCatalog";
 import {
   getHashTab as getRouteHashTab,
@@ -945,37 +944,29 @@ export const CustomerPortal = ({
                   {menu.map((item) => (
                     <div
                       key={item.id}
-                      className="bg-white p-4 rounded-2xl border border-black/5 flex gap-4 shadow-sm"
+                      className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm"
                     >
-                      <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0">
-                        <img
-                          loading="lazy"
-                          src={getMenuImage(item)}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="flex justify-between items-start">
-                            <h3 className="font-serif italic">{item.name}</h3>
-                            <span className="text-sm font-serif italic">
-                              N$ {item.price}
-                            </span>
-                          </div>
+                          <h3 className="font-serif italic">{item.name}</h3>
                           <p className="text-[10px] font-mono text-black/40 uppercase mt-1">
                             {item.category} • {item.type}
                           </p>
                         </div>
-                        <button
-                          onClick={() => placeOrder(item)}
-                          disabled={item.status === "Out of Stock"}
-                          className="mt-2 text-xs font-mono uppercase text-emerald-600 hover:text-emerald-700 font-bold disabled:text-black/20"
-                        >
-                          {item.status === "Available"
-                            ? "+ Add to Order"
-                            : "Out of Stock"}
-                        </button>
+                        <div className="text-right">
+                          <p className="text-sm font-serif italic">
+                            N$ {item.price}
+                          </p>
+                          <button
+                            onClick={() => placeOrder(item)}
+                            disabled={item.status === "Out of Stock"}
+                            className="mt-2 text-xs font-mono uppercase text-emerald-600 hover:text-emerald-700 font-bold disabled:text-black/20"
+                          >
+                            {item.status === "Available"
+                              ? "+ Add to Order"
+                              : "Out of Stock"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

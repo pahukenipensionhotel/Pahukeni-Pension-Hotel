@@ -618,6 +618,9 @@ export function ReportsModule({
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [showLedger, setShowLedger] = useState(false);
+  const [selectedLedgerDate, setSelectedLedgerDate] = useState(() =>
+    toInputDate(new Date()),
+  );
   const [expenseForm, setExpenseForm] = useState({
     date: toInputDate(new Date()),
     category: "Supplies",
@@ -825,36 +828,83 @@ export function ReportsModule({
     setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
   };
 
-  // Build a ledger view by merging income and expense rows and computing a running balance
+  // Build a ledger view for a single selected day (new sheet per day)
   const ledgerEntries = useMemo(() => {
-    // Map rows to a unified ledger entry
-    const entries = filteredRows.map((row) => {
-      const time = Number.isNaN(new Date(row.date).getTime())
-        ? Date.now()
-        : new Date(row.date).getTime();
-      return {
-        id: row.id,
-        date: time,
-        dateStr: formatDate(row.date),
-        category: row.category,
-        description: row.details || `${row.category} - ${row.reference}`,
-        party: row.guest,
-        payment_method: row.meta?.payment_method || row.status || "N/A",
-        income: row.amount > 0 ? row.amount : 0,
-        expense: row.amount < 0 ? Math.abs(row.amount) : 0,
-      };
+    const dayKey = selectedLedgerDate;
+
+    // Use the full dataset (allRows) as the ledger source so daily sheets are independent
+    const dailyRows = allRows.filter((row) => {
+      const rowKey = toInputDate(new Date(row.date));
+      return rowKey === dayKey;
     });
 
-    // sort ascending by date for running balance
-    entries.sort((a, b) => a.date - b.date);
+    const entries = dailyRows
+      .map((row) => {
+        const time = Number.isNaN(new Date(row.date).getTime())
+          ? Date.now()
+          : new Date(row.date).getTime();
+        return {
+          id: row.id,
+          date: time,
+          dateStr: formatDate(row.date),
+          category: row.category,
+          description: row.details || `${row.category} - ${row.reference}`,
+          party: row.guest,
+          payment_method: row.meta?.payment_method || row.status || "N/A",
+          income: row.amount > 0 ? row.amount : 0,
+          expense: row.amount < 0 ? Math.abs(row.amount) : 0,
+        };
+      })
+      .sort((a, b) => a.date - b.date);
 
-    // compute running balance
+    // compute running balance (starts at 0 for each day)
     let balance = 0;
     return entries.map((e) => {
       balance = balance + (e.income || 0) - (e.expense || 0);
       return { ...e, balance };
     });
-  }, [filteredRows]);
+  }, [allRows, selectedLedgerDate]);
+
+  // Daily aggregations for ledger header / summary when ledger is active
+  const dailyRowsForSelected = useMemo(
+    () =>
+      allRows.filter(
+        (row) => toInputDate(new Date(row.date)) === selectedLedgerDate,
+      ),
+    [allRows, selectedLedgerDate],
+  );
+
+  const dailyIncome = dailyRowsForSelected.reduce(
+    (sum, r) => sum + (r.amount > 0 ? r.amount : 0),
+    0,
+  );
+  const dailyExpenditure = dailyRowsForSelected.reduce(
+    (sum, r) => sum + (r.amount < 0 ? Math.abs(r.amount) : 0),
+    0,
+  );
+
+  const dailyCardIncome = bookings
+    .filter(
+      (b) =>
+        toInputDate(new Date(b.created_at || b.check_in || new Date())) ===
+          selectedLedgerDate && b.payment_method === "Card",
+    )
+    .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+  const dailyCashIncome = bookings
+    .filter(
+      (b) =>
+        toInputDate(new Date(b.created_at || b.check_in || new Date())) ===
+          selectedLedgerDate && b.payment_method === "Cash",
+    )
+    .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+  const displayedCashIncome = showLedger ? dailyCashIncome : cashIncome;
+  const displayedCardIncome = showLedger ? dailyCardIncome : cardIncome;
+  const displayedExpenditure = showLedger ? dailyExpenditure : totalExpenditure;
+  const displayedNetOperating = showLedger
+    ? dailyIncome - dailyExpenditure
+    : netOperating;
 
   return (
     <div className="space-y-6">
@@ -890,6 +940,17 @@ export function ReportsModule({
             <FileText size={16} />
             Ledger
           </button>
+          {showLedger && (
+            <div className="flex items-center gap-2">
+              <label className="sr-only">Ledger Date</label>
+              <input
+                type="date"
+                value={selectedLedgerDate}
+                onChange={(e) => setSelectedLedgerDate(e.target.value)}
+                className="rounded-xl border border-black/10 px-3 py-2 text-sm"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -922,7 +983,7 @@ export function ReportsModule({
             Cash Income
           </p>
           <p className="mt-2 text-xl font-serif italic">
-            {currency.format(cashIncome)}
+            {currency.format(displayedCashIncome)}
           </p>
         </div>
         <div className="rounded-xl border border-black/5 bg-white p-5">
@@ -930,7 +991,7 @@ export function ReportsModule({
             Card Income
           </p>
           <p className="mt-2 text-xl font-serif italic">
-            {currency.format(cardIncome)}
+            {currency.format(displayedCardIncome)}
           </p>
         </div>
         <div className="rounded-xl border border-black/5 bg-white p-5">
@@ -938,7 +999,7 @@ export function ReportsModule({
             Expenditure
           </p>
           <p className="mt-2 text-xl font-serif italic text-red-600">
-            {currency.format(totalExpenditure)}
+            {currency.format(displayedExpenditure)}
           </p>
         </div>
         <div className="rounded-xl border border-black/5 bg-white p-5">
@@ -946,7 +1007,7 @@ export function ReportsModule({
             Net Operating
           </p>
           <p className="mt-2 text-xl font-serif italic">
-            {currency.format(netOperating)}
+            {currency.format(displayedNetOperating)}
           </p>
         </div>
       </div>
