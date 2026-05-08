@@ -25,12 +25,15 @@ export function canManagePosMenu(
   type: "Restaurant" | "Bar",
   role?: User["role"] | null,
 ) {
-  void type;
-  return isStaffRole(role);
+  if (role === "Admin" || role === "System Developer") return true;
+  if (type === "Bar" && (role === "Barman" || role === "Receptionist"))
+    return true;
+  if (type === "Restaurant" && role === "Receptionist") return true;
+  return false;
 }
 
 export function canManageInventory(role?: User["role"] | null) {
-  return role === "Admin" || role === "Barman";
+  return role === "Admin" || role === "Barman" || role === "System Developer";
 }
 
 export function canReceiveOrderNotifications(

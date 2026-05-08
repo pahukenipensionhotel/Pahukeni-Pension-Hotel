@@ -1,10 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { FileText, X, Printer } from "lucide-react";
-import { updateDoc, doc } from "firebase/firestore";
-import { db } from "../../../services/firebase/client";
+import { getDoc, doc } from "firebase/firestore";
+import { auth, db } from "../../../services/firebase/client";
 import { MenuItem } from "../../../shared/types/hotel";
-import { handleFirestoreError, OperationType } from "../../../shared/validation/inputs";
+import {
+  handleFirestoreError,
+  OperationType,
+} from "../../../shared/validation/inputs";
+import { updateMenuItemInventory } from "../../orders/repositories/menuRepository";
 
 export const InventoryModule = ({
   menu,
@@ -27,15 +31,33 @@ export const InventoryModule = ({
       const item = barMenu.find((m) => m.id === itemId);
       if (!item) return;
       const newStock = Math.max(0, (item.stock || 0) + amount);
-      const newStatus = newStock === 0 ? "Out of Stock" : "Available";
-      await updateDoc(doc(db, "menu_items", itemId), {
-        stock: newStock,
-        status: newStatus,
-      });
+      await updateMenuItemInventory(itemId, newStock, item.type);
       setIsAddingStock(null);
       setIsDeductingStock(null);
       setStockAmount(0);
     } catch (err) {
+      console.error("Update stock error:", err);
+      try {
+        if (auth?.currentUser) {
+          auth.currentUser
+            .getIdTokenResult()
+            .then((t) => {
+              console.log("ID token claims:", t?.claims);
+            })
+            .catch((e) => console.warn("Failed to read ID token claims", e));
+
+          const uid = auth.currentUser.uid;
+          getDoc(doc(db, "users", uid))
+            .then((d) => {
+              if (d.exists()) console.log("/users/uid doc:", d.data());
+              else console.log("/users/uid doc: not found");
+            })
+            .catch((e) => console.warn("Failed to read /users doc", e));
+        }
+      } catch (e) {
+        console.warn("Diagnostic logging failed", e);
+      }
+
       handleFirestoreError(err, OperationType.UPDATE, "menu_items");
     }
   };

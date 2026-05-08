@@ -45,6 +45,33 @@ function dedupeById<T extends { id: string }>(items: T[]) {
   return Array.from(new Map(items.map((item) => [item.id, item])).values());
 }
 
+function reportListenerError(
+  error: unknown,
+  operationType: OperationType,
+  path: string,
+  showToast: (msg: string, type: "success" | "error" | "info") => void,
+) {
+  const errorCode =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : null;
+
+  if (path === "folios" && errorCode === "permission-denied") {
+    console.warn("Ignoring folios listener permission error.");
+    return;
+  }
+
+  try {
+    handleFirestoreError(error, operationType, path);
+  } catch (loggedError) {
+    console.error(`Listener error on ${path}:`, loggedError);
+    showToast(`Unable to sync ${path}.`, "error");
+  }
+}
+
 export function useHotelData(
   showToast: (msg: string, type: "success" | "error" | "info") => void,
 ) {
@@ -99,7 +126,7 @@ export function useHotelData(
           snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Room),
         );
       },
-      (error) => handleFirestoreError(error, OperationType.GET, "rooms"),
+      (error) => reportListenerError(error, OperationType.GET, "rooms", showToast),
     );
 
     const unsubMenu = onSnapshot(
@@ -111,7 +138,8 @@ export function useHotelData(
           ),
         );
       },
-      (error) => handleFirestoreError(error, OperationType.GET, "menu_items"),
+      (error) =>
+        reportListenerError(error, OperationType.GET, "menu_items", showToast),
     );
 
     const ordersQuery = isStaff
@@ -147,7 +175,7 @@ export function useHotelData(
         }
         lastOrdersCount.current = newOrders.length;
       },
-      (error) => handleFirestoreError(error, OperationType.GET, "orders"),
+      (error) => reportListenerError(error, OperationType.GET, "orders", showToast),
     );
 
     const laundryQuery = isStaff
@@ -179,29 +207,49 @@ export function useHotelData(
         lastLaundryCount.current = newLaundry.length;
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "laundry_orders"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "laundry_orders",
+          showToast,
+        ),
     );
 
+    const roomBookingsQuery = isStaff
+      ? collection(db, "room_bookings")
+      : query(collection(db, "room_bookings"), where("guest_uid", "==", user.id));
+
     const unsubBookings = onSnapshot(
-      collection(db, "room_bookings"),
+      roomBookingsQuery,
       (snapshot) => {
         setBookings(
           snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
         );
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "room_bookings"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "room_bookings",
+          showToast,
+        ),
     );
 
-    const unsubFolios = onSnapshot(
-      collection(db, "folios"),
-      (snapshot) => {
-        setFolios(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Folio),
-        );
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, "folios"),
-    );
+    const canReadFolios = canManageRooms(user.role);
+    const unsubFolios = canReadFolios
+      ? onSnapshot(
+          collection(db, "folios"),
+          (snapshot) => {
+            setFolios(
+              snapshot.docs.map(
+                (doc) => ({ id: doc.id, ...doc.data() }) as Folio,
+              ),
+            );
+          },
+          (error) =>
+            reportListenerError(error, OperationType.GET, "folios", showToast),
+        )
+      : () => setFolios([]);
 
     const unsubExpenditures = onSnapshot(
       collection(db, "expenditures"),
@@ -212,7 +260,13 @@ export function useHotelData(
           ),
         );
       },
-      (error) => handleFirestoreError(error, OperationType.GET, "expenditures"),
+      (error) =>
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "expenditures",
+          showToast,
+        ),
     );
 
     let unsubUsers = () => {};
@@ -224,7 +278,8 @@ export function useHotelData(
             snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as User),
           );
         },
-        (error) => handleFirestoreError(error, OperationType.GET, "users"),
+        (error) =>
+          reportListenerError(error, OperationType.GET, "users", showToast),
       );
     }
 
@@ -236,7 +291,12 @@ export function useHotelData(
         );
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "conference_rooms"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_rooms",
+          showToast,
+        ),
     );
 
     const unsubLaundryServices = onSnapshot(
@@ -247,7 +307,12 @@ export function useHotelData(
         );
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "laundry_services"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "laundry_services",
+          showToast,
+        ),
     );
 
     const unsubConfServices = onSnapshot(
@@ -258,7 +323,12 @@ export function useHotelData(
         );
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "conference_services"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_services",
+          showToast,
+        ),
     );
 
     const confBookingsQuery = isStaff
@@ -290,7 +360,12 @@ export function useHotelData(
         lastBookingCount.current = newBookings.length;
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "conference_bookings"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_bookings",
+          showToast,
+        ),
     );
 
     const unsubNotifs = onSnapshot(
@@ -363,7 +438,12 @@ export function useHotelData(
         );
       },
       (error) =>
-        handleFirestoreError(error, OperationType.GET, "global_preferences"),
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "global_preferences",
+          showToast,
+        ),
     );
 
     return () => {

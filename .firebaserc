@@ -1,8 +1,8 @@
 {
   "projects": {
-    "staging": "ai-studio-applet-webapp-a6a81",
-    "default": "ai-studio-applet-webapp-a6a81",
-    "staginh": "ai-studio-applet-webapp-a6a81"
+    "staging": "pahukeni-pension-hotel-ae1e5",
+    "default": "pahukeni-pension-hotel-ae1e5",
+    "staginh": "pahukeni-pension-hotel-ae1e5"
   },
   "targets": {},
   "etags": {}

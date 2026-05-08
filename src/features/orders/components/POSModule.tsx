@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, RefreshCw, Trash2, X, FileText, Printer } from "lucide-react";
+import {
+  Search,
+  RefreshCw,
+  Trash2,
+  X,
+  FileText,
+  Printer,
+  Edit2,
+} from "lucide-react";
 import {
   collection,
   addDoc,
@@ -17,6 +25,7 @@ import {
 import {
   handleFirestoreError,
   OperationType,
+  requireText,
   sanitizeText,
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
@@ -26,6 +35,7 @@ import {
   buildOrderStatusMessage,
 } from "../../notifications/services/notificationWorkflow";
 import { InventoryModule } from "../../inventory/components/InventoryModule";
+import { createEmptyMenuItemDraft } from "../repositories/menuRepository";
 
 const LOCAL_ASSETS = IMAGE_CATALOG;
 
@@ -45,16 +55,8 @@ export const POSModule = ({
   const [cart, setCart] = useState<{ item: MenuItem; qty: number }[]>([]);
   const [table, setTable] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [newItem, setNewItem] = useState({
-    name: "",
-    price: 0,
-    category: "",
-    type,
-    status: "Available" as const,
-    costPrice: 0,
-    stock: 0,
-    minStock: 5,
-  });
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [newItem, setNewItem] = useState(() => createEmptyMenuItemDraft(type));
   const [showPrintConfirm, setShowPrintConfirm] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
 
@@ -92,6 +94,10 @@ export const POSModule = ({
     }, 5000);
     return () => clearInterval(interval);
   }, [moduleShowcase.images.length]);
+
+  useEffect(() => {
+    setNewItem(createEmptyMenuItemDraft(type));
+  }, [type]);
 
   const filteredMenu = menu.filter((item) => item.type === type);
   const filteredOrders = orders
@@ -150,10 +156,10 @@ export const POSModule = ({
           const menuItem = menu.find((m) => m.id === cartItem.item.id);
           if (menuItem && menuItem.stock !== undefined) {
             const newStock = Math.max(0, menuItem.stock - cartItem.qty);
-            const newStatus = newStock === 0 ? "Out of Stock" : menuItem.status;
             await updateDoc(doc(db, "menu_items", menuItem.id), {
               stock: newStock,
-              status: newStatus,
+              status: newStock === 0 ? "Out of Stock" : "Available",
+              updated_at: new Date().toISOString(),
             });
           }
         }
@@ -180,28 +186,64 @@ export const POSModule = ({
       alert("You do not have permission to add menu items.");
       return;
     }
+
+    let payload;
     try {
-      await addDoc(collection(db, "menu_items"), newItem);
-      setIsAdding(false);
-      setNewItem({
-        name: "",
-        price: 0,
-        category: "",
+      const name = requireText(newItem.name, "Name", 80);
+      const category = requireText(newItem.category, "Category", 60);
+
+      payload = {
+        name,
+        category,
+        price: Number.isFinite(newItem.price) ? Math.max(0, newItem.price) : 0,
+        costPrice: Number.isFinite(newItem.costPrice)
+          ? Math.max(0, newItem.costPrice)
+          : 0,
+        stock: Number.isFinite(newItem.stock) ? Math.max(0, newItem.stock) : 0,
+        minStock: Number.isFinite(newItem.minStock)
+          ? Math.max(0, newItem.minStock)
+          : 0,
         type,
-        status: "Available",
-        costPrice: 0,
-        stock: 0,
-        minStock: 5,
-      });
+        status:
+          type === "Bar" && Math.max(0, newItem.stock) === 0
+            ? "Out of Stock"
+            : "Available",
+      };
+    } catch (err) {
+      if (err instanceof Error) {
+        alert(err.message);
+        return;
+      }
+      throw err;
+    }
+
+    try {
+      if (editingItemId) {
+        await updateDoc(doc(db, "menu_items", editingItemId), {
+          ...payload,
+          updated_at: new Date().toISOString(),
+        });
+        setEditingItemId(null);
+      } else {
+        await addDoc(collection(db, "menu_items"), {
+          ...payload,
+          created_at: new Date().toISOString(),
+        });
+      }
+      setIsAdding(false);
+      setNewItem(createEmptyMenuItemDraft(type));
     } catch (err) {
       if (
         err instanceof Error &&
-        (err.message.includes("Missing or insufficient permissions") ||
-          err.message.includes("permission-denied"))
+        err.message.includes("permission-denied")
       ) {
         alert(
           "Permission denied while creating menu item. Deploy latest Firestore rules and verify role access.",
         );
+        return;
+      }
+      if (err instanceof Error) {
+        alert(err.message);
         return;
       }
       handleFirestoreError(err, OperationType.CREATE, "menu_items");
@@ -220,20 +262,41 @@ export const POSModule = ({
     try {
       const newStatus =
         item.status === "Available" ? "Out of Stock" : "Available";
-      await updateDoc(doc(db, "menu_items", item.id), { status: newStatus });
+      await updateDoc(doc(db, "menu_items", item.id), {
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      });
     } catch (err) {
       if (
         err instanceof Error &&
-        (err.message.includes("Missing or insufficient permissions") ||
-          err.message.includes("permission-denied"))
+        err.message.includes("permission-denied")
       ) {
         alert(
           "Permission denied while updating menu item. Deploy latest Firestore rules and verify role access.",
         );
         return;
       }
+      if (err instanceof Error) {
+        alert(err.message);
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, "menu_items");
     }
+  };
+
+  const startEditItem = (item: MenuItem) => {
+    setEditingItemId(item.id);
+    setNewItem({
+      name: item.name,
+      category: item.category,
+      price: item.price,
+      costPrice: item.costPrice ?? 0,
+      stock: item.stock ?? 0,
+      minStock: item.minStock ?? 5,
+      type: item.type,
+      status: item.status,
+    });
+    setIsAdding(true);
   };
 
   const updateOrderStatus = async (
@@ -344,7 +407,11 @@ export const POSModule = ({
                   {(activeSubTab === "menu" || activeSubTab === "inventory") &&
                     canManageMenu && (
                       <button
-                        onClick={() => setIsAdding(true)}
+                        onClick={() => {
+                          setEditingItemId(null);
+                          setNewItem(createEmptyMenuItemDraft(type));
+                          setIsAdding(true);
+                        }}
                         className="px-3 py-1.5 sm:px-4 sm:py-2 bg-black text-white rounded-xl text-[10px] sm:text-xs font-mono uppercase tracking-widest whitespace-nowrap"
                       >
                         Add Item
@@ -433,6 +500,16 @@ export const POSModule = ({
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         {canManageMenu && (
                           <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditItem(item);
+                              }}
+                              className="p-1 text-sky-400 hover:text-sky-600 transition-colors"
+                              title="Edit Item"
+                            >
+                              <Edit2 size={14} />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -791,9 +868,15 @@ export const POSModule = ({
               className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
             >
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-xl font-serif italic">Add Menu Item</h3>
+                <h3 className="text-xl font-serif italic">
+                  {editingItemId ? "Edit Menu Item" : "Add Menu Item"}
+                </h3>
                 <button
-                  onClick={() => setIsAdding(false)}
+                  onClick={() => {
+                    setIsAdding(false);
+                    setEditingItemId(null);
+                    setNewItem(createEmptyMenuItemDraft(type));
+                  }}
                   className="text-black/40 hover:text-black"
                 >
                   <X size={24} />
@@ -905,7 +988,7 @@ export const POSModule = ({
                   type="submit"
                   className="w-full py-4 bg-black text-white rounded-2xl text-xs font-mono uppercase tracking-widest hover:bg-black/80 transition-all mt-4"
                 >
-                  Create Menu Item
+                  {editingItemId ? "Update Menu Item" : "Create Menu Item"}
                 </button>
               </form>
             </motion.div>

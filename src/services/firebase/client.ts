@@ -1,62 +1,56 @@
-import { initializeApp } from "firebase/app";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
-import { doc, getDocFromServer, initializeFirestore } from "firebase/firestore";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
-import { deobfuscate } from "../../shared/utils/security";
-
-/**
- * SECURE MASKED CONFIGURATION
- * XOR + Base64 obfuscation to prevent scraping and plain-text exposure.
- */
-const _c = {
-  k: "MSgSFDgcLyMoPQg+AF5aKhpCSFMDHhEYPTQWDVwNGwciXjEgWQ1Z",
-  d: "EQhFBh8QCgAwXQQeAwUKGnJFVVBXABFFFF0EVlhxFgwcFgsOHTpTQEIYEw4F",
-  u: "GBUcBRhfQUY+GUgdBxwLBzAfUUJGHAQcWBwADAgvAEgPRQhXX3JWVVRXBQ0cWBkRCgtxFgwcFgsOHTpbXxxVHww=",
-  p: "EQhFBh8QCgAwXQQeAwUKGnJFVVBXABFFFF0EVlg=",
-  b: "EQhFBh8QCgAwXQQeAwUKGnJFVVBXABFFFF0EVlhxFgwcFgsOHTpBRF1EEQYNWwoVHg==",
-  m: "QldaR1JSWVFtQ1Rd",
-  a: "QVtaQ1lXV15oSFddQlpVGTpQClQGRQcNFw5UWghoFVxaRlgOC2gGAwo=",
-  f: "EQhFBh8QCgAwXVIPSg8MWGoHHVRSQwVFQVlRD0RnFFxcXgpZCGoAUlZSFlReQw==",
-};
+import {
+  Firestore,
+  doc,
+  getDocFromServer,
+  initializeFirestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: deobfuscate(_c.k),
-  authDomain: deobfuscate(_c.d),
-  databaseURL: deobfuscate(_c.u),
-  projectId: deobfuscate(_c.p),
-  storageBucket: deobfuscate(_c.b),
-  messagingSenderId: deobfuscate(_c.m),
-  appId: deobfuscate(_c.a),
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+type FirebaseSingleton = {
+  db?: Firestore;
+};
+
+const firebaseSingleton = globalThis as typeof globalThis & {
+  __pahukeniFirebase?: FirebaseSingleton;
+};
+
+const singletonState =
+  firebaseSingleton.__pahukeniFirebase ??
+  (firebaseSingleton.__pahukeniFirebase = {});
+
+export const db =
+  singletonState.db ??
+  (singletonState.db = initializeFirestore(app, {
+    experimentalAutoDetectLongPolling: true,
+  }));
+
+export const auth = getAuth(app);
 
 if (typeof window !== "undefined") {
-  const isLocalhost =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
-
-  if (isLocalhost) {
-    (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  }
-
-  const RECAPTCHA_SITE_KEY = "";
-  if (RECAPTCHA_SITE_KEY || isLocalhost) {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY || "6LeR_debug_key"),
-      isTokenAutoRefreshEnabled: true,
+  void isSupported()
+    .then((supported) => {
+      if (supported) {
+        getAnalytics(app);
+      }
+    })
+    .catch(() => {
+      // Analytics is optional in unsupported environments.
     });
-  }
 }
-
-export const db = initializeFirestore(
-  app,
-  {
-    experimentalForceLongPolling: true,
-  },
-  deobfuscate(_c.f),
-);
-export const auth = getAuth(app);
 
 async function testConnection() {
   try {

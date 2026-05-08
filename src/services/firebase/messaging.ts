@@ -6,10 +6,8 @@ import {
 } from "firebase/messaging";
 import { doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "./client";
-import { deobfuscate } from "../../shared/utils/security";
 
-// VAPID key should be set from your Firebase Console (Cloud Messaging settings)
-const DEFAULT_VAPID_KEY = deobfuscate(""); // Add your obfuscated VAPID key here if needed
+const DEFAULT_VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 let lastSavedToken: string | null = null;
 const TOKEN_REFRESH_INTERVAL = 1000 * 60 * 60 * 24 * 7; // Refresh once a week
@@ -31,9 +29,20 @@ export async function registerForPush(vapidKey: string = DEFAULT_VAPID_KEY) {
       return null;
     }
 
-    // Register service worker from the public root
+    // Register service worker from the public root with config params
+    const configParams = new URLSearchParams({
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+      messagingSenderId:
+        import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "",
+    }).toString();
+
     const registration = await navigator.serviceWorker.register(
-      "/firebase-messaging-sw.js",
+      `/firebase-messaging-sw.js?${configParams}`,
     );
     const messaging = getMessaging();
 

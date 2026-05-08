@@ -47,8 +47,11 @@ import { StaffModule } from "./features/staff/components/StaffModule";
 import { CustomerPortal } from "./features/dashboard/components/CustomerPortal";
 import { ReportsModule } from "./features/reports/components/ReportsModule";
 import { SystemLogs } from "./features/reports/components/SystemLogs";
+import usePushNotifications from "./hooks_usePushNotifications";
 
 export default function App() {
+  usePushNotifications();
+
   const [toasts, setToasts] = useState<
     { id: string; message: string; type: "success" | "error" | "info" }[]
   >([]);
