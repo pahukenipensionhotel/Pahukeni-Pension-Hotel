@@ -15,6 +15,7 @@ import {
   validateEmailAddress,
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
+import { logger } from "../../../shared/utils/logger";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -58,8 +59,16 @@ export function LoginPage() {
     setError("");
 
     try {
-      await signInAnonymously(auth);
+      const userCredential = await signInAnonymously(auth);
+      await logger.info(
+        "AUTH",
+        "GUEST_LOGIN",
+        "User logged in as guest",
+        userCredential.user.uid,
+        "Guest",
+      );
     } catch (err: any) {
+      await logger.error("AUTH", "GUEST_LOGIN_FAILED", err.message);
       setError(err.message || "Guest login failed");
     } finally {
       setLoading(false);
@@ -90,10 +99,34 @@ export function LoginPage() {
           role: "Customer",
           email: normalizedEmail,
         });
+        await logger.info(
+          "AUTH",
+          "REGISTER",
+          `User registered: ${normalizedEmail}`,
+          userCredential.user.uid,
+          normalizedName,
+        );
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(
+          auth,
+          email,
+          password,
+        );
+        await logger.info(
+          "AUTH",
+          "LOGIN",
+          `User logged in: ${email}`,
+          userCredential.user.uid,
+        );
       }
     } catch (err: any) {
+      await logger.security(
+        isRegistering ? "REGISTER_FAILED" : "LOGIN_FAILED",
+        `Failed attempt for ${email}: ${err.message}`,
+        undefined,
+        undefined,
+        { email, errorCode: err.code },
+      );
       if (err.code === "auth/invalid-credential") {
         let message =
           'Invalid email or password. If you have not registered yet, please click "Register here" below.';
@@ -126,8 +159,19 @@ export function LoginPage() {
     setError("");
 
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      const userCredential = await signInWithPopup(
+        auth,
+        new GoogleAuthProvider(),
+      );
+      await logger.info(
+        "AUTH",
+        "GOOGLE_LOGIN",
+        `User logged in via Google: ${userCredential.user.email}`,
+        userCredential.user.uid,
+        userCredential.user.displayName || undefined,
+      );
     } catch (err: any) {
+      await logger.error("AUTH", "GOOGLE_LOGIN_FAILED", err.message);
       if (err.code === "auth/popup-closed-by-user") {
         setError(
           "The login popup was closed before completion. Please try again.",

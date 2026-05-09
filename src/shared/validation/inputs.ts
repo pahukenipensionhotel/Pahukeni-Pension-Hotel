@@ -1,4 +1,5 @@
 import { auth } from "../../services/firebase/client";
+import { logger } from "../utils/logger";
 
 const MAX_TEXT_LENGTH = 120;
 const MAX_MESSAGE_LENGTH = 500;
@@ -103,6 +104,17 @@ export function handleFirestoreError(
     operationType,
     path,
   };
+
+  if (errInfo.error.includes("permission-denied")) {
+    void logger.security(
+      "FIRE_PERMISSION_DENIED",
+      `Unauthorized ${operationType} attempt on ${path}`,
+      auth.currentUser?.uid,
+      auth.currentUser?.displayName || undefined,
+      { path, operationType },
+    );
+  }
+
   console.error("Firestore Error: ", JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

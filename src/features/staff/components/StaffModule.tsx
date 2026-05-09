@@ -22,6 +22,8 @@ import {
   handleFirestoreError,
   OperationType,
 } from "../../../shared/validation/inputs";
+import { logger } from "../../../shared/utils/logger";
+import { auth } from "../../../services/firebase/client";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -80,6 +82,15 @@ export const StaffModule = ({
         ...memberData,
       });
 
+      await logger.info(
+        "STAFF",
+        "ADD_MEMBER",
+        `${activeSubTab === "staff" ? "Staff" : "Guest"} added: ${memberData.email} (${memberData.role})`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { targetUid: userCredential.user.uid, role: memberData.role },
+      );
+
       setIsAdding(false);
       setNewMember({
         name: "",
@@ -107,6 +118,14 @@ export const StaffModule = ({
   const updateRole = async (userId: string, newRole: User["role"]) => {
     try {
       await updateDoc(doc(db, "users", userId), { role: newRole });
+      await logger.info(
+        "STAFF",
+        "UPDATE_ROLE",
+        `Role updated for user ${userId} to ${newRole}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { targetUid: userId, newRole },
+      );
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, "users");
     }
@@ -116,6 +135,14 @@ export const StaffModule = ({
     if (!window.confirm("Are you sure you want to delete this user?")) return;
     try {
       await deleteDoc(doc(db, "users", userId));
+      await logger.warn(
+        "STAFF",
+        "DELETE_USER",
+        `User deleted: ${userId}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { targetUid: userId },
+      );
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, "users");
     }

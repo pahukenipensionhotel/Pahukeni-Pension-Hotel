@@ -11,6 +11,8 @@ import {
   parseNumberInput,
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
+import { logger } from "../../../shared/utils/logger";
+import { auth } from "../../../services/firebase/client";
 
 const LOCAL_ASSETS = IMAGE_CATALOG;
 
@@ -60,6 +62,14 @@ export const ConferenceModule = ({
     e.preventDefault();
     try {
       await addDoc(collection(db, "conference_rooms"), newRoom);
+      await logger.info(
+        "BOOKING",
+        "ADD_CONFERENCE_ROOM",
+        `New conference room added: ${newRoom.name}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { roomName: newRoom.name, capacity: newRoom.capacity },
+      );
       setIsAdding(false);
       setNewRoom({
         name: "",
@@ -113,6 +123,15 @@ export const ConferenceModule = ({
         total_price: totalPrice,
         status: "Pending",
       });
+
+      await logger.info(
+        "BOOKING",
+        "PLACE_CONFERENCE_BOOKING",
+        `New conference booking for ${newBooking.client_name}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { room: selectedFacility.name, total: totalPrice },
+      );
 
       // Notify staff
       await createNotification({

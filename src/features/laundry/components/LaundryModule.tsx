@@ -22,6 +22,8 @@ import {
   notifyUser,
   buildLaundryStatusMessage,
 } from "../../notifications/services/notificationWorkflow";
+import { logger } from "../../../shared/utils/logger";
+import { auth } from "../../../services/firebase/client";
 
 export const LaundryModule = ({
   orders,
@@ -82,6 +84,15 @@ export const LaundryModule = ({
         })),
         created_at: new Date().toISOString(),
       });
+
+      await logger.info(
+        "LAUNDRY",
+        "PLACE_ORDER",
+        `New laundry order for ${newOrder.guest_name}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { room: newOrder.room_number, total },
+      );
 
       // Notify staff
       await notifyRole({
@@ -152,6 +163,15 @@ export const LaundryModule = ({
       const updateData: any = { status };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, "laundry_orders", id), updateData);
+
+      await logger.info(
+        "LAUNDRY",
+        "UPDATE_STATUS",
+        `Laundry order ${id} status updated to ${status}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { orderId: id, status, estimatedArrival },
+      );
 
       // Create notification for the guest
       const order = orders.find((o) => o.id === id);

@@ -36,6 +36,8 @@ import {
 } from "../../notifications/services/notificationWorkflow";
 import { InventoryModule } from "../../inventory/components/InventoryModule";
 import { createEmptyMenuItemDraft } from "../repositories/menuRepository";
+import { logger } from "../../../shared/utils/logger";
+import { auth } from "../../../services/firebase/client";
 
 const LOCAL_ASSETS = IMAGE_CATALOG;
 
@@ -135,6 +137,15 @@ export const POSModule = ({
         placed_by: userRole,
       });
 
+      await logger.info(
+        "ORDER",
+        "PLACE_ORDER",
+        `New ${type} order placed for table ${table || "Walk-in"}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { type, table, total, itemsCount: cart.length },
+      );
+
       if (type === "Bar") {
         await notifyRole({
           role: "Barman",
@@ -233,10 +244,7 @@ export const POSModule = ({
       setIsAdding(false);
       setNewItem(createEmptyMenuItemDraft(type));
     } catch (err) {
-      if (
-        err instanceof Error &&
-        err.message.includes("permission-denied")
-      ) {
+      if (err instanceof Error && err.message.includes("permission-denied")) {
         alert(
           "Permission denied while creating menu item. Deploy latest Firestore rules and verify role access.",
         );
@@ -267,10 +275,7 @@ export const POSModule = ({
         updated_at: new Date().toISOString(),
       });
     } catch (err) {
-      if (
-        err instanceof Error &&
-        err.message.includes("permission-denied")
-      ) {
+      if (err instanceof Error && err.message.includes("permission-denied")) {
         alert(
           "Permission denied while updating menu item. Deploy latest Firestore rules and verify role access.",
         );
@@ -308,6 +313,15 @@ export const POSModule = ({
       const updateData: Partial<Order> = { status: newStatus };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, "orders", orderId), updateData);
+
+      await logger.info(
+        "ORDER",
+        "UPDATE_STATUS",
+        `Order ${orderId} status updated to ${newStatus}`,
+        auth.currentUser?.uid,
+        auth.currentUser?.displayName || undefined,
+        { orderId, newStatus, estimatedArrival },
+      );
 
       const order = orders.find((o) => o.id === orderId);
       if (order && order.customer_email) {
