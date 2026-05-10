@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Edit2, Trash2, X, ClipboardList, Search, Receipt } from "lucide-react";
-import { format, parseISO, differenceInDays, isSameDay, startOfToday, addDays } from "date-fns";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  ClipboardList,
+  Search,
+  Receipt,
+} from "lucide-react";
+import {
+  format,
+  parseISO,
+  differenceInDays,
+  isSameDay,
+  startOfToday,
+  addDays,
+} from "date-fns";
 import {
   doc,
   updateDoc,
@@ -68,26 +83,28 @@ export const RoomsModule = ({
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [selectedFolioBooking, setSelectedFolioBooking] = useState<RoomBooking | null>(null);
+  const [selectedFolioBooking, setSelectedFolioBooking] =
+    useState<RoomBooking | null>(null);
   const [portfolioServices, setPortfolioServices] =
-    useState<any[]>(globalPreferences);
-  const [newRoom, setNewRoom] = useState({
+    useState<GlobalPreference[]>(globalPreferences);
+  const [newRoom, setNewRoom] = useState<Omit<Room, "id">>({
     number: "",
     category: "Single",
     price: 0,
-    status: "Available" as any,
+    status: "Available",
+    imageUrl: LOCAL_ASSETS.rooms.single,
+    description: "",
+    amenities: [],
     breakfastIncluded: true,
     breakfastPrice: 150,
-    additionalServices: [] as { name: string; price: number }[],
-    description: "",
-    amenities: [] as string[],
-    imageUrl: LOCAL_ASSETS.rooms.single,
-    prefix: "SR",
+    additionalServices: [],
   });
 
   const [filterCheckIn, setFilterCheckIn] = useState("");
   const [filterCheckOut, setFilterCheckOut] = useState("");
-  const [selectedBookingRoom, setSelectedBookingRoom] = useState<Room | null>(null);
+  const [selectedBookingRoom, setSelectedBookingRoom] = useState<Room | null>(
+    null,
+  );
   const [bookingSearch, setBookingSearch] = useState("");
 
   const filteredRooms = useMemo(() => {
@@ -155,8 +172,6 @@ export const RoomsModule = ({
         additionalServices: [],
         description: "",
         amenities: [],
-        imageUrl: LOCAL_ASSETS.rooms.single,
-        prefix: "SR",
       });
     } catch (err) {
       console.error("Firestore Error (Rooms):", err);
@@ -294,7 +309,12 @@ export const RoomsModule = ({
                 ${activeSubTab === "bookings" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
               Daily Bookings (
-              {bookings.filter((b) => b.status === "Pending" || b.status === "Checked In").length})
+              {
+                bookings.filter(
+                  (b) => b.status === "Pending" || b.status === "Checked In",
+                ).length
+              }
+              )
             </button>
             <button
               onClick={() => setActiveSubTab("calendar")}
@@ -327,8 +347,6 @@ export const RoomsModule = ({
                   additionalServices: [],
                   description: "",
                   amenities: [],
-                  imageUrl: LOCAL_ASSETS.rooms.single,
-                  prefix: "SR",
                 });
                 setIsAdding(true);
               }}
@@ -350,7 +368,7 @@ export const RoomsModule = ({
 
       {activeSubTab === "rooms" ? (
         <div className="space-y-6">
-          <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-[260px] bg-white">
+          <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-65 bg-white">
             <img
               loading="lazy"
               src={conferenceShowcase}
@@ -358,7 +376,7 @@ export const RoomsModule = ({
               className="absolute inset-0 h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/45 to-black/10" />
-            <div className="relative flex min-h-[260px] flex-col justify-end p-6 text-white">
+            <div className="relative flex min-h-65 flex-col justify-end p-6 text-white">
               <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
                 Meetings & Events
               </p>
@@ -366,8 +384,8 @@ export const RoomsModule = ({
                 Conference Facilities
               </h3>
               <p className="mt-2 max-w-xl text-sm text-white/80">
-                The conference module now uses the on-site hall photography so the
-                booking experience reflects the real venue.
+                The conference module now uses the on-site hall photography so
+                the booking experience reflects the real venue.
               </p>
             </div>
           </div>
@@ -408,88 +426,88 @@ export const RoomsModule = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredRooms.map((room) => (
-            <motion.div
-              key={room.id}
-              whileHover={{ y: -4 }}
-              className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-lg transition-all relative group"
-            >
-              <div className="aspect-video mb-4 rounded-xl overflow-hidden bg-gray-100 relative group-hover:shadow-inner">
-                <AnimatePresence mode="wait">
-                  <motion.img
-                    key={
-                      room.imageUrl ||
-                      (room.category === "Single"
-                        ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
-                        : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
-                    }
-                    src={
-                      room.imageUrl ||
-                      (room.category === "Single"
-                        ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
-                        : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
-                    }
-                    alt={`Room ${room.number}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                  />
-                </AnimatePresence>
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  {canManage && (
-                    <>
-                      <button
-                        onClick={() => startEdit(room)}
-                        className="p-2 bg-white text-black rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                        title="Edit Room"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Are you sure you want to delete Room ${room.number}?`,
-                            )
-                          ) {
-                            deleteRoom(room.id);
-                          }
-                        }}
-                        className="p-2 bg-white text-red-500 rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                        title="Delete Room"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
+              <motion.div
+                key={room.id}
+                whileHover={{ y: -4 }}
+                className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-lg transition-all relative group"
+              >
+                <div className="aspect-video mb-4 rounded-xl overflow-hidden bg-gray-100 relative group-hover:shadow-inner">
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={
+                        room.imageUrl ||
+                        (room.category === "Single"
+                          ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
+                          : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
+                      }
+                      src={
+                        room.imageUrl ||
+                        (room.category === "Single"
+                          ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
+                          : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
+                      }
+                      alt={`Room ${room.number}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5 }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                    />
+                  </AnimatePresence>
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    {canManage && (
+                      <>
+                        <button
+                          onClick={() => startEdit(room)}
+                          className="p-2 bg-white text-black rounded-lg hover:bg-white/90 transition-all shadow-sm"
+                          title="Edit Room"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Are you sure you want to delete Room ${room.number}?`,
+                              )
+                            ) {
+                              deleteRoom(room.id);
+                            }
+                          }}
+                          className="p-2 bg-white text-red-500 rounded-lg hover:bg-white/90 transition-all shadow-sm"
+                          title="Delete Room"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <span className="px-2.5 py-1 bg-[#141414] text-white rounded-sm text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
-                      {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
-                    </span>
-                    <span className="text-[9px] font-mono text-black/30 font-bold uppercase tracking-[0.2em] border-l border-black/10 pl-4">
-                      UNIT REGISTRY
-                    </span>
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-3 mb-2.5">
+                      <span className="px-2.5 py-1 bg-[#141414] text-white rounded-sm text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
+                        {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
+                      </span>
+                      <span className="text-[9px] font-mono text-black/30 font-bold uppercase tracking-[0.2em] border-l border-black/10 pl-4">
+                        UNIT REGISTRY
+                      </span>
+                    </div>
+                    <h3 className="text-6xl font-serif font-black tracking-tighter text-[#141414] leading-none mb-1.5">
+                      {room.number.replace(/^[A-Z]+/, "")}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-black/10"></div>
+                      <p className="text-[10px] font-mono text-black/50 font-medium uppercase tracking-[0.2em]">
+                        {room.category} Standard
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="text-6xl font-serif font-black tracking-tighter text-[#141414] leading-none mb-1.5">
-                    {room.number.replace(/^[A-Z]+/, "")}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-black/10"></div>
-                    <p className="text-[10px] font-mono text-black/50 font-medium uppercase tracking-[0.2em]">
-                      {room.category} Standard
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-[0.15em]
+                  <span
+                    className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-[0.15em]
                   ${
                     room.status === "Available"
                       ? "bg-emerald-50 text-emerald-700"
@@ -497,69 +515,70 @@ export const RoomsModule = ({
                         ? "bg-orange-50 text-orange-700"
                         : "bg-blue-50 text-blue-700"
                   }`}
-                >
-                  {room.status}
-                </span>
-              </div>
+                  >
+                    {room.status}
+                  </span>
+                </div>
 
-              <div className="space-y-3">
-                <div className="flex justify-between items-end text-xs pt-4 border-t border-black/3">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-black/30 font-mono uppercase tracking-widest mb-1">
-                      Standard Rate
-                    </span>
-                    <span className="text-xl font-serif italic font-medium text-black/80">
-                      N$ {room.price}
-                    </span>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end text-xs pt-4 border-t border-black/3">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-black/30 font-mono uppercase tracking-widest mb-1">
+                        Standard Rate
+                      </span>
+                      <span className="text-xl font-serif italic font-medium text-black/80">
+                        N$ {room.price}
+                      </span>
+                    </div>
+                  </div>
+
+                  {room.additionalServices &&
+                    room.additionalServices.length > 0 && (
+                      <div className="pt-2 border-t border-black/5">
+                        <div className="flex flex-wrap gap-1">
+                          {room.additionalServices.map((s, i) => (
+                            <span
+                              key={i}
+                              className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100"
+                            >
+                              {s.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  <p className="text-[10px] text-black/50 line-clamp-2 h-7 italic">
+                    {room.description ||
+                      "Premium room with modern essentials..."}
+                  </p>
+
+                  <div className="flex gap-2">
+                    {room.status === "Available" ? (
+                      <button
+                        onClick={() => setSelectedBookingRoom(room)}
+                        className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
+                      >
+                        Check In
+                      </button>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          await updateDoc(doc(db, "rooms", room.id), {
+                            status: "Available",
+                          });
+                        }}
+                        className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
+                      >
+                        Check Out
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                {room.additionalServices &&
-                  room.additionalServices.length > 0 && (
-                    <div className="pt-2 border-t border-black/5">
-                      <div className="flex flex-wrap gap-1">
-                        {room.additionalServices.map((s, i) => (
-                          <span
-                            key={i}
-                            className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100"
-                          >
-                            {s.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                <p className="text-[10px] text-black/50 line-clamp-2 h-7 italic">
-                  {room.description || "Premium room with modern essentials..."}
-                </p>
-
-                <div className="flex gap-2">
-                  {room.status === "Available" ? (
-                    <button
-                      onClick={() => setSelectedBookingRoom(room)}
-                      className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
-                    >
-                      Check In
-                    </button>
-                  ) : (
-                    <button
-                      onClick={async () => {
-                        await updateDoc(doc(db, "rooms", room.id), {
-                          status: "Available",
-                        });
-                      }}
-                      className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
-                    >
-                      Check Out
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
       ) : activeSubTab === "bookings" ? (
         <div className="space-y-6">
           <div className="bg-white p-4 rounded-2xl border border-black/5 flex items-center gap-3">
@@ -614,157 +633,159 @@ export const RoomsModule = ({
                       );
                     })
                     .map((booking: RoomBooking) => (
-                    <tr
-                      key={booking.id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="p-6">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm">
-                            {booking.guest_name}
-                          </span>
-                          <span className="text-[10px] text-black/40 font-mono">
-                            {booking.guest_email}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-lg bg-black/5 flex items-center justify-center text-[10px] font-mono font-bold text-black/40">
-                            {booking.room_number.match(/^[A-Z]+/)?.[0] || "RM"}
-                          </span>
+                      <tr
+                        key={booking.id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="p-6">
                           <div className="flex flex-col">
-                            <span className="text-sm font-serif italic font-medium leading-none">
-                              #{booking.room_number.replace(/^[A-Z]+/, "")}
+                            <span className="font-medium text-sm">
+                              {booking.guest_name}
                             </span>
-                            <span className="text-[9px] font-mono text-black/30 uppercase tracking-widest mt-1">
-                              Confirmed Unit
+                            <span className="text-[10px] text-black/40 font-mono">
+                              {booking.guest_email}
                             </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium">
-                            {format(parseISO(booking.check_in), "MMM dd")} -{" "}
-                            {format(parseISO(booking.check_out), "MMM dd")}
-                          </span>
-                          <span className="text-[10px] text-black/40 font-mono">
-                            {differenceInDays(
-                              parseISO(booking.check_out),
-                              parseISO(booking.check_in),
-                            )}{" "}
-                            Nights
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex flex-col gap-1">
-                          {booking.breakfast_included && (
-                            <span className="text-[10px] text-emerald-600 font-mono uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded w-fit">
-                              Breakfast
+                        </td>
+                        <td className="p-6">
+                          <div className="flex items-center gap-3">
+                            <span className="w-8 h-8 rounded-lg bg-black/5 flex items-center justify-center text-[10px] font-mono font-bold text-black/40">
+                              {booking.room_number.match(/^[A-Z]+/)?.[0] ||
+                                "RM"}
                             </span>
-                          )}
-                          {booking.additional_services?.map(
-                            (svc: string, i: number) => (
-                              <span
-                                key={i}
-                                className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit"
-                              >
-                                {svc}
+                            <div className="flex flex-col">
+                              <span className="text-sm font-serif italic font-medium leading-none">
+                                #{booking.room_number.replace(/^[A-Z]+/, "")}
                               </span>
-                            ),
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-6">
-                        <span className="text-sm font-serif italic font-medium">
-                          N$ {booking.total_price}
-                        </span>
-                      </td>
-                      <td className="p-6">
-                        <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-mono uppercase animate-pulse">
-                          Pending
-                        </span>
-                      </td>
-                      <td className="p-6 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => setSelectedFolioBooking(booking)}
-                            className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center gap-2"
-                          >
-                            <Receipt size={14} /> Manage Folio
-                          </button>
-                          {booking.status === "Pending" && (
+                              <span className="text-[9px] font-mono text-black/30 uppercase tracking-widest mt-1">
+                                Confirmed Unit
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-6">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium">
+                              {format(parseISO(booking.check_in), "MMM dd")} -{" "}
+                              {format(parseISO(booking.check_out), "MMM dd")}
+                            </span>
+                            <span className="text-[10px] text-black/40 font-mono">
+                              {differenceInDays(
+                                parseISO(booking.check_out),
+                                parseISO(booking.check_in),
+                              )}{" "}
+                              Nights
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-6">
+                          <div className="flex flex-col gap-1">
+                            {booking.breakfast_included && (
+                              <span className="text-[10px] text-emerald-600 font-mono uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded w-fit">
+                                Breakfast
+                              </span>
+                            )}
+                            {booking.additional_services?.map(
+                              (svc: string, i: number) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit"
+                                >
+                                  {svc}
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-6">
+                          <span className="text-sm font-serif italic font-medium">
+                            N$ {booking.total_price}
+                          </span>
+                        </td>
+                        <td className="p-6">
+                          <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-mono uppercase animate-pulse">
+                            Pending
+                          </span>
+                        </td>
+                        <td className="p-6 text-right">
+                          <div className="flex justify-end gap-2">
                             <button
-                              onClick={async () => {
-                              try {
-                                const batch = writeBatch(db);
-                                batch.update(
-                                  doc(db, "room_bookings", booking.id),
-                                  { status: "Confirmed" },
-                                );
-                                const bookedRoom = rooms.find(
-                                  (room) => room.number === booking.room_number,
-                                );
-                                if (bookedRoom) {
-                                  batch.update(
-                                    doc(db, "rooms", bookedRoom.id),
-                                    { status: "Occupied" },
-                                  );
-                                }
-                                await batch.commit();
+                              onClick={() => setSelectedFolioBooking(booking)}
+                              className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center gap-2"
+                            >
+                              <Receipt size={14} /> Manage Folio
+                            </button>
+                            {booking.status === "Pending" && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const batch = writeBatch(db);
+                                    batch.update(
+                                      doc(db, "room_bookings", booking.id),
+                                      { status: "Confirmed" },
+                                    );
+                                    const bookedRoom = rooms.find(
+                                      (room) =>
+                                        room.number === booking.room_number,
+                                    );
+                                    if (bookedRoom) {
+                                      batch.update(
+                                        doc(db, "rooms", bookedRoom.id),
+                                        { status: "Occupied" },
+                                      );
+                                    }
+                                    await batch.commit();
 
-                                await logger.info(
-                                  "BOOKING",
-                                  "CONFIRM_BOOKING",
-                                  `Staff confirmed booking for ${booking.guest_name} in Room ${booking.room_number}`,
-                                  undefined, // In a real scenario, we'd pass the current staff user ID
-                                  "Staff User",
-                                  {
-                                    bookingId: booking.id,
-                                    roomNumber: booking.room_number,
-                                  },
-                                );
+                                    await logger.info(
+                                      "BOOKING",
+                                      "CONFIRM_BOOKING",
+                                      `Staff confirmed booking for ${booking.guest_name} in Room ${booking.room_number}`,
+                                      undefined, // In a real scenario, we'd pass the current staff user ID
+                                      "Staff User",
+                                      {
+                                        bookingId: booking.id,
+                                        roomNumber: booking.room_number,
+                                      },
+                                    );
 
-                                await createWorkflowNotification({
-                                  userId: booking.guest_uid,
-                                  title: "Stay Confirmed!",
-                                  message: `Your stay in Room ${booking.room_number} is confirmed.`,
-                                  type: "system",
-                                });
-                              } catch (err) {
-                                handleFirestoreError(
-                                  err,
-                                  OperationType.UPDATE,
-                                  "room_bookings",
-                                );
-                              }
-                            }}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2"
-                          >
-                            Confirm & Notify
-                          </button>
-                          )}
-                        </div>
+                                    await createWorkflowNotification({
+                                      userId: booking.guest_uid,
+                                      title: "Stay Confirmed!",
+                                      message: `Your stay in Room ${booking.room_number} is confirmed.`,
+                                      type: "system",
+                                    });
+                                  } catch (err) {
+                                    handleFirestoreError(
+                                      err,
+                                      OperationType.UPDATE,
+                                      "room_bookings",
+                                    );
+                                  }
+                                }}
+                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2"
+                              >
+                                Confirm & Notify
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  {bookings.filter((b: RoomBooking) => b.status === "Pending")
+                    .length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="p-12 text-center text-black/20 font-mono text-sm italic"
+                      >
+                        No pending booking requests.
                       </td>
                     </tr>
-                  ))}
-                {bookings.filter((b: RoomBooking) => b.status === "Pending")
-                  .length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="p-12 text-center text-black/20 font-mono text-sm italic"
-                    >
-                      No pending booking requests.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         </div>
       ) : activeSubTab === "calendar" ? (
         <BookingCalendar rooms={rooms} bookings={bookings} />
@@ -1246,7 +1267,7 @@ export const RoomsModule = ({
         {selectedFolioBooking && (
           <FolioModal
             booking={selectedFolioBooking}
-            folio={folios.find(f => f.booking_id === selectedFolioBooking.id)}
+            folio={folios.find((f) => f.booking_id === selectedFolioBooking.id)}
             rooms={rooms}
             onClose={() => setSelectedFolioBooking(null)}
           />

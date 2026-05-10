@@ -9,7 +9,12 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { LaundryOrder, User } from "../../../shared/types/hotel";
+import {
+  LaundryOrder,
+  LaundryService,
+  Notification,
+  User,
+} from "../../../shared/types/hotel";
 import { canManageLaundry } from "../../../shared/security/authorization";
 import {
   handleFirestoreError,
@@ -34,31 +39,38 @@ export const LaundryModule = ({
   createNotification,
 }: {
   orders: LaundryOrder[];
-  services: any[];
+  services: LaundryService[];
   isAdmin: boolean;
   userRole?: string;
   user: User;
-  createNotification: (notif: any) => Promise<void>;
+  createNotification: (
+    notif: Omit<Notification, "id" | "read" | "created_at">,
+  ) => Promise<void>;
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<string>("orders");
 
   const canManage = canManageLaundry(userRole as User["role"] | undefined);
-  const [newOrder, setNewOrder] = useState({
+  const [newOrder, setNewOrder] = useState<
+    Omit<LaundryOrder, "id" | "items" | "created_at">
+  >({
     room_number: "",
     guest_name: "",
     total_price: 0,
-    status: "Received" as any,
+    status: "Received",
   });
-  const [newService, setNewService] = useState({ name: "", price: 0 });
-  const [cart, setCart] = useState<{ item: any; qty: number }[]>([]);
+  const [newService, setNewService] = useState<Omit<LaundryService, "id">>({
+    name: "",
+    price: 0,
+  });
+  const [cart, setCart] = useState<{ item: LaundryService; qty: number }[]>([]);
   const [showPrintConfirm, setShowPrintConfirm] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
 
   const total = cart.reduce((sum, i) => sum + i.item.price * i.qty, 0);
 
-  const addToCart = (item: any) => {
+  const addToCart = (item: LaundryService) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.item.id === item.id);
       if (existing)
@@ -156,11 +168,11 @@ export const LaundryModule = ({
 
   const updateStatus = async (
     id: string,
-    status: string,
+    status: LaundryOrder["status"],
     estimatedArrival?: string,
   ) => {
     try {
-      const updateData: any = { status };
+      const updateData: Partial<LaundryOrder> = { status };
       if (estimatedArrival) updateData.estimated_arrival = estimatedArrival;
       await updateDoc(doc(db, "laundry_orders", id), updateData);
 

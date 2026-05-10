@@ -3,6 +3,7 @@ import {
   getToken,
   onMessage,
   deleteToken,
+  MessagePayload,
 } from "firebase/messaging";
 import { doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "./client";
@@ -155,7 +156,9 @@ export function listenForSubscriptionChange(handler: () => Promise<void>) {
   });
 }
 
-export function onForegroundMessage(callback: (payload: any) => void) {
+export function onForegroundMessage(
+  callback: (payload: MessagePayload) => void,
+) {
   try {
     const messaging = getMessaging();
     onMessage(messaging, (payload) => {

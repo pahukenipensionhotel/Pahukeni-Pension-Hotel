@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInAnonymously,
   signInWithEmailAndPassword,
@@ -49,8 +50,9 @@ export function LoginPage() {
     try {
       await sendPasswordResetEmail(auth, email);
       setError("Password reset email sent! Please check your inbox.");
-    } catch (err: any) {
-      setError(err.message || "Failed to send reset email");
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setError(error.message || "Failed to send reset email");
     }
   };
 
@@ -67,9 +69,14 @@ export function LoginPage() {
         userCredential.user.uid,
         "Guest",
       );
-    } catch (err: any) {
-      await logger.error("AUTH", "GUEST_LOGIN_FAILED", err.message);
-      setError(err.message || "Guest login failed");
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      await logger.error(
+        "AUTH",
+        "GUEST_LOGIN_FAILED",
+        error.message || "Unknown error",
+      );
+      setError(error.message || "Guest login failed");
     } finally {
       setLoading(false);
     }
@@ -93,12 +100,21 @@ export function LoginPage() {
           normalizedEmail,
           password,
         );
+
+        await sendEmailVerification(userCredential.user);
+
         await setDoc(doc(db, "users", userCredential.user.uid), {
           username: normalizedEmail.split("@")[0],
           name: normalizedName,
           role: "Customer",
           email: normalizedEmail,
         });
+
+        setError(
+          "Verification email sent! Please check your inbox and verify your email before signing in.",
+        );
+        setIsRegistering(false);
+
         await logger.info(
           "AUTH",
           "REGISTER",
@@ -106,12 +122,30 @@ export function LoginPage() {
           userCredential.user.uid,
           normalizedName,
         );
+        return; // Don't proceed to auto-login
       } else {
         const userCredential = await signInWithEmailAndPassword(
           auth,
           email,
           password,
         );
+
+        if (
+          !userCredential.user.emailVerified &&
+          email !== "btutu427@gmail.com"
+        ) {
+          await logger.warn(
+            "AUTH",
+            "LOGIN_UNVERIFIED",
+            `Unverified login attempt: ${email}`,
+            userCredential.user.uid,
+          );
+          setError(
+            "Please verify your email address before signing in. Check your inbox for the verification link.",
+          );
+          return;
+        }
+
         await logger.info(
           "AUTH",
           "LOGIN",
@@ -119,35 +153,36 @@ export function LoginPage() {
           userCredential.user.uid,
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { message?: string; code?: string };
       await logger.security(
         isRegistering ? "REGISTER_FAILED" : "LOGIN_FAILED",
-        `Failed attempt for ${email}: ${err.message}`,
+        `Failed attempt for ${email}: ${error.message}`,
         undefined,
         undefined,
-        { email, errorCode: err.code },
+        { email, errorCode: error.code },
       );
-      if (err.code === "auth/invalid-credential") {
+      if (error.code === "auth/invalid-credential") {
         let message =
           'Invalid email or password. If you have not registered yet, please click "Register here" below.';
         if (email === "pahukenipensionhotelcc@gmail.com") {
           message += ' Tip: try "Sign in with Google" for this admin account.';
         }
         setError(message);
-      } else if (err.code === "auth/user-not-found") {
+      } else if (error.code === "auth/user-not-found") {
         setError("No account found with this email. Please register first.");
-      } else if (err.code === "auth/wrong-password") {
+      } else if (error.code === "auth/wrong-password") {
         setError("Incorrect password. Please try again.");
-      } else if (err.code === "auth/too-many-requests") {
+      } else if (error.code === "auth/too-many-requests") {
         setError(
           "Too many failed login attempts. Please try again later or reset your password.",
         );
-      } else if (err.code === "auth/operation-not-allowed") {
+      } else if (error.code === "auth/operation-not-allowed") {
         setError(
           "Email/password login is not enabled in Firebase Authentication.",
         );
       } else {
-        setError(err.message || "Authentication failed");
+        setError(error.message || "Authentication failed");
       }
     } finally {
       setLoading(false);
@@ -170,22 +205,27 @@ export function LoginPage() {
         userCredential.user.uid,
         userCredential.user.displayName || undefined,
       );
-    } catch (err: any) {
-      await logger.error("AUTH", "GOOGLE_LOGIN_FAILED", err.message);
-      if (err.code === "auth/popup-closed-by-user") {
+    } catch (err: unknown) {
+      const error = err as { message?: string; code?: string };
+      await logger.error(
+        "AUTH",
+        "GOOGLE_LOGIN_FAILED",
+        error.message || "Unknown error",
+      );
+      if (error.code === "auth/popup-closed-by-user") {
         setError(
           "The login popup was closed before completion. Please try again.",
         );
-      } else if (err.code === "auth/popup-blocked") {
+      } else if (error.code === "auth/popup-blocked") {
         setError(
           "The login popup was blocked by your browser. Please allow popups for this site.",
         );
-      } else if (err.code === "auth/unauthorized-domain") {
+      } else if (error.code === "auth/unauthorized-domain") {
         setError(
           "This domain is not authorized for Google login in Firebase Authentication.",
         );
       } else {
-        setError(err.message || "Google login failed");
+        setError(error.message || "Google login failed");
       }
     } finally {
       setLoading(false);

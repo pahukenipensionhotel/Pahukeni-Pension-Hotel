@@ -102,6 +102,7 @@ export interface RoomBooking {
   guest_uid: string;
   guest_name: string;
   guest_email?: string;
+  customer_email?: string; // Added for compatibility
   guest_id_number?: string;
   source?: "Phone" | "WhatsApp" | "Walk-in" | "Online";
   payment_method?: "Cash" | "Card";
@@ -177,12 +178,13 @@ export interface ConferenceService {
 export interface ConferenceBooking {
   id: string;
   room_id: string;
+  room_name?: string;
   client_name: string;
   client_uid: string;
   start_time: string;
   end_time: string;
   total_price: number;
-  status: "Confirmed" | "Cancelled" | "Completed";
+  status: "Confirmed" | "Cancelled" | "Completed" | "Pending";
   created_at: string;
 }
 

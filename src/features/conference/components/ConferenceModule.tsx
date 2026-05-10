@@ -1,9 +1,15 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Plus } from "lucide-react";
+import { X } from "lucide-react";
 import { collection, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { User } from "../../../shared/types/hotel";
+import {
+  ConferenceBooking,
+  ConferenceRoom,
+  ConferenceService,
+  Notification,
+  User,
+} from "../../../shared/types/hotel";
 import { canManageConference } from "../../../shared/security/authorization";
 import {
   handleFirestoreError,
@@ -20,33 +26,35 @@ export const ConferenceModule = ({
   rooms,
   services,
   bookings,
-  isAdmin,
   userRole,
   user,
   createNotification,
 }: {
-  rooms: any[];
-  services: any[];
-  bookings: any[];
+  rooms: ConferenceRoom[];
+  services: ConferenceService[];
+  bookings: ConferenceBooking[];
   isAdmin: boolean;
   userRole?: string;
   user: User;
-  createNotification: (notif: any) => Promise<void>;
+  createNotification: (
+    notif: Omit<Notification, "id" | "read" | "created_at">,
+  ) => Promise<void>;
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
-  const [selectedFacility, setSelectedFacility] = useState<any>(null);
+  const [selectedFacility, setSelectedFacility] =
+    useState<ConferenceRoom | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<
     "facilities" | "services" | "bookings"
   >("facilities");
 
   const canManage = canManageConference(userRole as User["role"] | undefined);
-  const [newRoom, setNewRoom] = useState({
+  const [newRoom, setNewRoom] = useState<Omit<ConferenceRoom, "id">>({
     name: "",
     capacity: 0,
     price_per_hour: 0,
-    status: "Available" as any,
+    status: "Available",
   });
   const [newService, setNewService] = useState({ name: "", price: 0 });
   const [newBooking, setNewBooking] = useState({
@@ -231,7 +239,7 @@ export const ConferenceModule = ({
             : null}
       </div>
 
-      <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-[260px] bg-white">
+      <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-65 bg-white">
         <img
           loading="lazy"
           src={conferenceShowcase}
@@ -239,7 +247,7 @@ export const ConferenceModule = ({
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/45 to-black/10" />
-        <div className="relative flex min-h-[260px] flex-col justify-end p-6 text-white">
+        <div className="relative flex min-h-65 flex-col justify-end p-6 text-white">
           <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
             Meetings & Events
           </p>
@@ -260,7 +268,7 @@ export const ConferenceModule = ({
               key={room.id}
               className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm relative group"
             >
-              <div className="mb-5 overflow-hidden rounded-2xl border border-black/5 bg-[#F5F5F0] aspect-[4/3]">
+              <div className="mb-5 overflow-hidden rounded-2xl border border-black/5 bg-[#F5F5F0] aspect-4/3">
                 <img
                   loading="lazy"
                   src={conferenceShowcase}
@@ -310,7 +318,7 @@ export const ConferenceModule = ({
         </div>
       ) : activeSubTab === "bookings" ? (
         <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-200">
             <thead>
               <tr className="bg-gray-50 border-b border-black/5">
                 <th className="p-6 text-[10px] font-mono uppercase text-black/40">

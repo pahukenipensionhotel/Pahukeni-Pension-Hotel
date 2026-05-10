@@ -1,6 +1,7 @@
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import type {
+  ConferenceBooking,
   ConferenceRoom,
   ConferenceService,
 } from "../../../shared/types/hotel";
@@ -35,7 +36,7 @@ export function subscribeConferenceServices(
 export function subscribeConferenceBookings(
   userId: string,
   isStaff: boolean,
-  onData: (bookings: any[]) => void,
+  onData: (bookings: ConferenceBooking[]) => void,
   onError?: (error: unknown) => void,
 ) {
   const bookingsQuery = isStaff
@@ -48,7 +49,7 @@ export function subscribeConferenceBookings(
   return onSnapshot(
     bookingsQuery,
     (snapshot) => {
-      onData(mapFirestoreSnapshot<any>(snapshot));
+      onData(mapFirestoreSnapshot<ConferenceBooking>(snapshot));
     },
     onError,
   );

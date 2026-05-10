@@ -2,8 +2,117 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // --- HELPER FUNCTIONS ---
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Use getAfter or get to safely check user data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (getUserData().role == 'Admin' || getUserData().role == 'System Developer');
+    }
+
+    function isStaff() {
+      return isAuthenticated() && (getUserData().role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry man', 'System Developer']);
+    }
+
+    // --- COLLECTION RULES ---
+
+    // Users: Can read their own or if staff.
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Public/Auth Readable Collections
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    match /menu_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    // Orders Collection
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Laundry Orders & Services
+    match /laundry_orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /laundry_services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    // Bookings
+    match /room_bookings/{bookingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /folios/{folioId} {
+      allow read, write: if isStaff();
+    }
+
+    // Conference
+    match /conference_rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /conference_services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /conference_bookings/{bookingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isStaff();
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isStaff();
+    }
+
+    // Logs & Preferences
+    match /system_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /global_preferences/{prefId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /expenditures/{expId} {
+      allow read, write: if isAdmin();
     }
   }
 }

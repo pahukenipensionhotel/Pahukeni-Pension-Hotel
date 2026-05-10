@@ -1,12 +1,15 @@
 import React, { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { X, CheckCircle2, Calendar as CalendarIcon } from "lucide-react";
-import { Room, RoomBooking } from "../../../shared/types/hotel";
+import {
+  Room,
+  RoomBooking,
+  GlobalPreference,
+} from "../../../shared/types/hotel";
 import {
   format,
   addDays,
   differenceInDays,
-  isBefore,
   startOfDay,
   parseISO,
 } from "date-fns";
@@ -24,7 +27,7 @@ interface RoomDetailsModalProps {
       checkOutDate: string;
     },
   ) => Promise<void>;
-  globalPreferences?: any[];
+  globalPreferences?: GlobalPreference[];
   getRoomImage: (room: Room) => string;
 }
 

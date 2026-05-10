@@ -1,22 +1,16 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Plus,
-  X,
-  Users,
-  User as UserIcon,
-  Calendar,
-  Trash2,
-} from "lucide-react";
+import { Plus, X, Users, User as UserIcon, Trash2 } from "lucide-react";
 import { initializeApp, getApp, deleteApp } from "firebase/app";
 import {
   getAuth,
   createUserWithEmailAndPassword,
   signOut,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { User } from "../../../shared/types/hotel";
+import { User, RoomBooking } from "../../../shared/types/hotel";
 import { maskEmail } from "../../../shared/utils/security";
 import {
   handleFirestoreError,
@@ -42,7 +36,7 @@ export const StaffModule = ({
   bookings,
 }: {
   users: User[];
-  bookings: any[];
+  bookings: RoomBooking[];
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<"staff" | "guests">("staff");
   const [isAdding, setIsAdding] = useState(false);
@@ -74,10 +68,17 @@ export const StaffModule = ({
         newMember.email,
         newMember.password,
       );
+
+      // Send verification email to the new staff/guest
+      await sendEmailVerification(userCredential.user);
+
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp);
 
       const { password: _password, ...memberData } = newMember;
+
+      // The Firestore rules I just deployed ensure only an Admin can write to /users
+      // with a non-'Customer' role.
       await setDoc(doc(db, "users", userCredential.user.uid), {
         ...memberData,
       });
@@ -85,7 +86,7 @@ export const StaffModule = ({
       await logger.info(
         "STAFF",
         "ADD_MEMBER",
-        `${activeSubTab === "staff" ? "Staff" : "Guest"} added: ${memberData.email} (${memberData.role})`,
+        `${activeSubTab === "staff" ? "Staff" : "Guest"} created and provisioned: ${memberData.email} (${memberData.role})`,
         auth.currentUser?.uid,
         auth.currentUser?.displayName || undefined,
         { targetUid: userCredential.user.uid, role: memberData.role },
@@ -100,11 +101,12 @@ export const StaffModule = ({
         role: activeSubTab === "staff" ? "Waiter" : "Customer",
       });
       alert(
-        `${activeSubTab === "staff" ? "Staff member" : "Guest"} registered successfully.`,
+        `${activeSubTab === "staff" ? "Staff member" : "Guest"} registered successfully. A verification email has been sent to them.`,
       );
-    } catch (err: any) {
-      console.error("Registration error:", err);
-      alert("Failed to register: " + err.message);
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      console.error("Registration error:", error);
+      alert("Failed to register: " + error.message);
       if (secondaryApp) {
         try {
           await deleteApp(secondaryApp);
@@ -262,11 +264,10 @@ export const StaffModule = ({
                     </div>
                   </td>
                   <td className="p-6">
-                    {activeSubTab === "staff" ? (
                       <select
                         value={user.role}
                         onChange={(e) =>
-                          updateRole(user.id, e.target.value as any)
+                          updateRole(user.id, e.target.value as User["role"])
                         }
                         className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer"
                       >
@@ -299,7 +300,7 @@ export const StaffModule = ({
                         <select
                           value={user.role}
                           onChange={(e) =>
-                            updateRole(user.id, e.target.value as any)
+                            updateRole(user.id, e.target.value as User["role"])
                           }
                           className="ml-4 bg-gray-50 px-2 py-1 rounded text-[10px] font-mono uppercase border-none focus:ring-0 cursor-pointer text-black/40 hover:text-black transition-colors"
                         >
@@ -428,12 +429,11 @@ export const StaffModule = ({
                       onChange={(e) =>
                         setNewMember({
                           ...newMember,
-                          role: e.target.value as any,
+                          role: e.target.value as User["role"],
                         })
                       }
                       className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
-                    >
-                      {ROLES.map((role) => (
+                    >                      {ROLES.map((role) => (
                         <option key={role} value={role}>
                           {role}
                         </option>

@@ -56,6 +56,38 @@ export default function App() {
     { id: string; message: string; type: "success" | "error" | "info" }[]
   >([]);
 
+  // --- Session Inactivity Timer ---
+  useEffect(() => {
+    let inactivityTimeout: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(inactivityTimeout);
+      // Force logout after 30 minutes of inactivity
+      inactivityTimeout = setTimeout(
+        () => {
+          if (auth.currentUser) {
+            signOut(auth);
+            alert(
+              "Your session has expired due to inactivity. Please log in again.",
+            );
+          }
+        },
+        30 * 60 * 1000,
+      );
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, resetTimer));
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(inactivityTimeout);
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+    };
+  }, []);
+  // --------------------------------
+
   const addToast = (
     message: string,
     type: "success" | "error" | "info" = "info",

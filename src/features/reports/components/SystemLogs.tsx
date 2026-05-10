@@ -5,16 +5,10 @@ import {
   orderBy,
   limit,
   onSnapshot,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../../../firebase";
-import {
-  ScrollText,
-  Clock,
-  User,
-  Tag,
-  AlertCircle,
-  Download,
-} from "lucide-react";
+import { ScrollText, Clock, User, Download } from "lucide-react";
 import { motion } from "motion/react";
 
 interface LogEntry {
@@ -24,8 +18,8 @@ interface LogEntry {
   action: string;
   message: string;
   userName?: string;
-  timestamp: any;
-  details?: any;
+  timestamp: Timestamp;
+  details?: Record<string, unknown>;
 }
 
 export const SystemLogs = () => {

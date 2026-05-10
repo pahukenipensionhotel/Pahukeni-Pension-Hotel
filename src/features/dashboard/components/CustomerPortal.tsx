@@ -30,6 +30,7 @@ import {
   RoomBooking,
   ConferenceBooking,
   Notification as HotelNotification,
+  GlobalPreference,
 } from "../../../shared/types/hotel";
 import {
   IMAGE_CATALOG,
@@ -67,7 +68,9 @@ export const CustomerPortal = ({
   user: User;
   notifications: HotelNotification[];
   markHotelNotificationAsRead: (id: string) => Promise<void>;
-  createNotification: (notif: any) => Promise<void>;
+  createNotification: (
+    notif: Omit<HotelNotification, "id" | "read" | "created_at">,
+  ) => Promise<void>;
   rooms: Room[];
   menu: MenuItem[];
   laundryServices: LaundryService[];
@@ -77,7 +80,7 @@ export const CustomerPortal = ({
   myLaundryOrders: LaundryOrder[];
   myRoomBookings: RoomBooking[];
   myConferenceBookings: ConferenceBooking[];
-  globalPreferences?: any[];
+  globalPreferences?: GlobalPreference[];
 }) => {
   const HERO_SLIDE_INTERVAL_MS = 4000;
   const HERO_TRANSITION_SECONDS = 0.55;

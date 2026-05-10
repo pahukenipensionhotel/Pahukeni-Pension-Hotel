@@ -20,6 +20,12 @@ import {
   Notification as HotelNotification,
   Folio,
   HotelExpenditure,
+  RoomBooking,
+  ConferenceRoom,
+  LaundryService,
+  ConferenceService,
+  ConferenceBooking,
+  GlobalPreference,
 } from "../shared/types/hotel";
 import { isStaffRole } from "../shared/security/roles";
 import {
@@ -81,13 +87,19 @@ export function useHotelData(
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [laundry, setLaundry] = useState<LaundryOrder[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<RoomBooking[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [conferenceRooms, setConferenceRooms] = useState<any[]>([]);
-  const [laundryServices, setLaundryServices] = useState<any[]>([]);
-  const [conferenceServices, setConferenceServices] = useState<any[]>([]);
-  const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
-  const [globalPreferences, setGlobalPreferences] = useState<any[]>([]);
+  const [conferenceRooms, setConferenceRooms] = useState<ConferenceRoom[]>([]);
+  const [laundryServices, setLaundryServices] = useState<LaundryService[]>([]);
+  const [conferenceServices, setConferenceServices] = useState<
+    ConferenceService[]
+  >([]);
+  const [conferenceBookings, setConferenceBookings] = useState<
+    ConferenceBooking[]
+  >([]);
+  const [globalPreferences, setGlobalPreferences] = useState<
+    GlobalPreference[]
+  >([]);
   const [folios, setFolios] = useState<Folio[]>([]);
   const [expenditures, setExpenditures] = useState<HotelExpenditure[]>([]);
   const [notifications, setHotelNotifications] = useState<HotelNotification[]>(
@@ -126,7 +138,8 @@ export function useHotelData(
           snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Room),
         );
       },
-      (error) => reportListenerError(error, OperationType.GET, "rooms", showToast),
+      (error) =>
+        reportListenerError(error, OperationType.GET, "rooms", showToast),
     );
 
     const unsubMenu = onSnapshot(
@@ -175,7 +188,8 @@ export function useHotelData(
         }
         lastOrdersCount.current = newOrders.length;
       },
-      (error) => reportListenerError(error, OperationType.GET, "orders", showToast),
+      (error) =>
+        reportListenerError(error, OperationType.GET, "orders", showToast),
     );
 
     const laundryQuery = isStaff
@@ -217,13 +231,18 @@ export function useHotelData(
 
     const roomBookingsQuery = isStaff
       ? collection(db, "room_bookings")
-      : query(collection(db, "room_bookings"), where("guest_uid", "==", user.id));
+      : query(
+          collection(db, "room_bookings"),
+          where("guest_uid", "==", user.id),
+        );
 
     const unsubBookings = onSnapshot(
       roomBookingsQuery,
       (snapshot) => {
         setBookings(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as RoomBooking,
+          ),
         );
       },
       (error) =>
@@ -269,19 +288,88 @@ export function useHotelData(
         ),
     );
 
-    let unsubUsers = () => {};
-    if (canManageStaff(user.role)) {
-      unsubUsers = onSnapshot(
-        collection(db, "users"),
-        (snapshot) => {
-          setUsers(
-            snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as User),
-          );
-        },
-        (error) =>
-          reportListenerError(error, OperationType.GET, "users", showToast),
-      );
-    }
+    const unsubUsers = onSnapshot(
+      collection(db, "users"),
+      (snapshot) => {
+        setUsers(
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as User),
+        );
+      },
+      (error) =>
+        reportListenerError(error, OperationType.GET, "users", showToast),
+    );
+
+    const unsubConfRooms = onSnapshot(
+      collection(db, "conference_rooms"),
+      (snapshot) => {
+        setConferenceRooms(
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as ConferenceRoom,
+          ),
+        );
+      },
+      (error) =>
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_rooms",
+          showToast,
+        ),
+    );
+
+    const unsubLaundryServices = onSnapshot(
+      collection(db, "laundry_services"),
+      (snapshot) => {
+        setLaundryServices(
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as LaundryService,
+          ),
+        );
+      },
+      (error) =>
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "laundry_services",
+          showToast,
+        ),
+    );
+
+    const unsubConfServices = onSnapshot(
+      collection(db, "conference_services"),
+      (snapshot) => {
+        setConferenceServices(
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as ConferenceService,
+          ),
+        );
+      },
+      (error) =>
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_services",
+          showToast,
+        ),
+    );
+
+    const unsubConfBookings = onSnapshot(
+      collection(db, "conference_bookings"),
+      (snapshot) => {
+        setConferenceBookings(
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as ConferenceBooking,
+          ),
+        );
+      },
+      (error) =>
+        reportListenerError(
+          error,
+          OperationType.GET,
+          "conference_bookings",
+          showToast,
+        ),
+    );
 
     const unsubConf = onSnapshot(
       collection(db, "conference_rooms"),
