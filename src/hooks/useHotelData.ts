@@ -371,91 +371,6 @@ export function useHotelData(
         ),
     );
 
-    const unsubConf = onSnapshot(
-      collection(db, "conference_rooms"),
-      (snapshot) => {
-        setConferenceRooms(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-        );
-      },
-      (error) =>
-        reportListenerError(
-          error,
-          OperationType.GET,
-          "conference_rooms",
-          showToast,
-        ),
-    );
-
-    const unsubLaundryServices = onSnapshot(
-      collection(db, "laundry_services"),
-      (snapshot) => {
-        setLaundryServices(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-        );
-      },
-      (error) =>
-        reportListenerError(
-          error,
-          OperationType.GET,
-          "laundry_services",
-          showToast,
-        ),
-    );
-
-    const unsubConfServices = onSnapshot(
-      collection(db, "conference_services"),
-      (snapshot) => {
-        setConferenceServices(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-        );
-      },
-      (error) =>
-        reportListenerError(
-          error,
-          OperationType.GET,
-          "conference_services",
-          showToast,
-        ),
-    );
-
-    const confBookingsQuery = isStaff
-      ? collection(db, "conference_bookings")
-      : query(
-          collection(db, "conference_bookings"),
-          where("client_uid", "==", user.id),
-        );
-
-    const unsubConfBookings = onSnapshot(
-      confBookingsQuery,
-      (snapshot) => {
-        const newBookings = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setConferenceBookings(newBookings);
-        if (
-          lastBookingCount.current !== null &&
-          newBookings.length > lastBookingCount.current
-        ) {
-          if (canReceiveFrontDeskNotifications(user.role)) {
-            NotificationService.notify("New Conference Booking", {
-              body: "A new conference room booking request has been received.",
-              tag: "new-conference",
-            });
-          }
-        }
-        lastBookingCount.current = newBookings.length;
-      },
-      (error) =>
-        reportListenerError(
-          error,
-          OperationType.GET,
-          "conference_bookings",
-          showToast,
-        ),
-    );
-
     const unsubNotifs = onSnapshot(
       query(
         collection(db, "notifications"),
@@ -522,7 +437,9 @@ export function useHotelData(
       collection(db, "global_preferences"),
       (snapshot) => {
         setGlobalPreferences(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() }) as GlobalPreference,
+          ),
         );
       },
       (error) =>
@@ -540,15 +457,16 @@ export function useHotelData(
       unsubOrders();
       unsubLaundry();
       unsubBookings();
-      unsubExpenditures();
       unsubUsers();
-      unsubConf();
+      unsubConfRooms();
       unsubLaundryServices();
       unsubConfServices();
       unsubConfBookings();
       unsubNotifs();
       unsubRoleNotifs();
       unsubPrefs();
+      unsubFolios();
+      unsubExpenditures();
     };
   }, [user]);
 

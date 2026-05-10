@@ -301,7 +301,7 @@ export const LaundryModule = ({
                       onChange={(e) =>
                         updateStatus(
                           order.id,
-                          e.target.value,
+                          e.target.value as LaundryOrder["status"],
                           estArrival[order.id],
                         )
                       }

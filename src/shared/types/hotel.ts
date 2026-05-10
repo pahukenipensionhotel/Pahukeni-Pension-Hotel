@@ -16,6 +16,7 @@ export interface User {
 export interface Room {
   id: string;
   number: string;
+  prefix?: string; // Added for UI compatibility
   category: string;
   price: number;
   status:

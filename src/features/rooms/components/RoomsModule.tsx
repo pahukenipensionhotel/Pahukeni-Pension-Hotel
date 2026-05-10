@@ -87,18 +87,21 @@ export const RoomsModule = ({
     useState<RoomBooking | null>(null);
   const [portfolioServices, setPortfolioServices] =
     useState<GlobalPreference[]>(globalPreferences);
-  const [newRoom, setNewRoom] = useState<Omit<Room, "id">>({
-    number: "",
-    category: "Single",
-    price: 0,
-    status: "Available",
-    imageUrl: LOCAL_ASSETS.rooms.single,
-    description: "",
-    amenities: [],
-    breakfastIncluded: true,
-    breakfastPrice: 150,
-    additionalServices: [],
-  });
+  const [newRoom, setNewRoom] = useState<Omit<Room, "id"> & { prefix: string }>(
+    {
+      number: "",
+      category: "Single",
+      price: 0,
+      status: "Available",
+      imageUrl: LOCAL_ASSETS.rooms.single,
+      description: "",
+      amenities: [],
+      breakfastIncluded: true,
+      breakfastPrice: 150,
+      additionalServices: [],
+      prefix: "SR",
+    },
+  );
 
   const [filterCheckIn, setFilterCheckIn] = useState("");
   const [filterCheckOut, setFilterCheckOut] = useState("");
@@ -167,11 +170,13 @@ export const RoomsModule = ({
         category: "Single",
         price: 0,
         status: "Available",
+        imageUrl: LOCAL_ASSETS.rooms.single,
+        description: "",
+        amenities: [],
         breakfastIncluded: true,
         breakfastPrice: 150,
         additionalServices: [],
-        description: "",
-        amenities: [],
+        prefix: "SR",
       });
     } catch (err) {
       console.error("Firestore Error (Rooms):", err);
@@ -249,90 +254,94 @@ export const RoomsModule = ({
 
     try {
       setIsSavingPref(true);
-      const docRef = await addDoc(collection(db, "global_preferences"), {
+      await addDoc(collection(db, "global_preferences"), {
         name: serviceName,
         price: validatedPrice,
         created_at: new Date().toISOString(),
       });
-      setPortfolioServices((prev) => [
-        ...prev,
-        { id: docRef.id, name: serviceName, price: validatedPrice },
-      ]);
       setNewPref({ name: "", price: "" });
       setIsAddingPref(false);
-
-      await createWorkflowNotification({
-        role: "Receptionist",
-        title: "Global Services Updated",
-        message: `New service "${serviceName}" has been added to the portfolio.`,
-        type: "system",
-      });
     } catch (err) {
-      console.error("Firestore Error (Global Preferences):", err);
-      setPortfolioFormError(
-        err instanceof Error
-          ? err.message
-          : "Failed to save the portfolio service.",
-      );
+      handleFirestoreError(err, OperationType.CREATE, "global_preferences");
     } finally {
       setIsSavingPref(false);
     }
   };
 
-  const deletePreference = async (id: string) => {
+  const deletePortfolioService = async (id: string) => {
     try {
       await deleteDoc(doc(db, "global_preferences", id));
-      setPortfolioServices((prev) => prev.filter((pref) => pref.id !== id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, "global_preferences");
     }
   };
+
+  const currentBookings = useMemo(() => {
+    const now = new Date();
+    return bookings
+      .filter((b) => {
+        if (b.status === "Cancelled" || b.status === "Checked Out")
+          return false;
+        const start = new Date(b.check_in);
+        const end = new Date(b.check_out);
+        return now >= start && now < end;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.check_in).getTime() - new Date(b.check_in).getTime(),
+      );
+  }, [bookings]);
+
+  const searchedBookings = useMemo(() => {
+    if (!bookingSearch.trim()) return bookings;
+    const term = bookingSearch.toLowerCase();
+    return bookings.filter(
+      (b) =>
+        b.guest_name.toLowerCase().includes(term) ||
+        b.room_number.toLowerCase().includes(term) ||
+        b.guest_email?.toLowerCase().includes(term),
+    );
+  }, [bookings, bookingSearch]);
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 md:gap-8">
           <h2 className="text-xl md:text-2xl font-serif italic">
-            Room Management
+            Room Registry
           </h2>
-          <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit">
+          <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit overflow-x-auto">
             <button
               onClick={() => setActiveSubTab("rooms")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === "rooms" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
-              Inventory
+              Accommodation
             </button>
             <button
               onClick={() => setActiveSubTab("bookings")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === "bookings" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
-              Daily Bookings (
-              {
-                bookings.filter(
-                  (b) => b.status === "Pending" || b.status === "Checked In",
-                ).length
-              }
-              )
+              Bookings
             </button>
             <button
               onClick={() => setActiveSubTab("calendar")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === "calendar" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
-              Live Calendar
+              Calendar
             </button>
             <button
               onClick={() => setActiveSubTab("services")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap
                 ${activeSubTab === "services" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
             >
-              Service Portfolio
+              Portfolio
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-2">
           {canManage && activeSubTab === "rooms" && (
             <button
               onClick={() => {
@@ -342,11 +351,13 @@ export const RoomsModule = ({
                   category: "Single",
                   price: 0,
                   status: "Available",
+                  imageUrl: LOCAL_ASSETS.rooms.single,
+                  description: "",
+                  amenities: [],
                   breakfastIncluded: true,
                   breakfastPrice: 150,
                   additionalServices: [],
-                  description: "",
-                  amenities: [],
+                  prefix: "SR",
                 });
                 setIsAdding(true);
               }}
@@ -446,134 +457,65 @@ export const RoomsModule = ({
                           ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
                           : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
                       }
-                      alt={`Room ${room.number}`}
+                      alt={room.category}
+                      className="w-full h-full object-cover"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.5 }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
+                      transition={{ duration: 0.4 }}
                     />
                   </AnimatePresence>
-                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    {canManage && (
-                      <>
-                        <button
-                          onClick={() => startEdit(room)}
-                          className="p-2 bg-white text-black rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                          title="Edit Room"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Are you sure you want to delete Room ${room.number}?`,
-                              )
-                            ) {
-                              deleteRoom(room.id);
-                            }
-                          }}
-                          className="p-2 bg-white text-red-500 rounded-lg hover:bg-white/90 transition-all shadow-sm"
-                          title="Delete Room"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </>
-                    )}
+                  <div className="absolute top-3 right-3">
+                    <span
+                      className={`px-2 py-1 rounded-lg text-[8px] font-mono uppercase tracking-widest border
+                      ${
+                        room.status === "Available"
+                          ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                          : room.status === "Occupied"
+                            ? "bg-red-50 text-red-600 border-red-100"
+                            : "bg-orange-50 text-orange-600 border-orange-100"
+                      }`}
+                    >
+                      {room.status}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-3 mb-2.5">
-                      <span className="px-2.5 py-1 bg-[#141414] text-white rounded-sm text-[8px] font-mono font-black uppercase tracking-[0.3em] leading-none shadow-lg">
-                        {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
-                      </span>
-                      <span className="text-[9px] font-mono text-black/30 font-bold uppercase tracking-[0.2em] border-l border-black/10 pl-4">
-                        UNIT REGISTRY
-                      </span>
-                    </div>
-                    <h3 className="text-6xl font-serif font-black tracking-tighter text-[#141414] leading-none mb-1.5">
-                      {room.number.replace(/^[A-Z]+/, "")}
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-[10px] font-mono text-black/30 uppercase tracking-widest mb-1">
+                      Room {room.number}
+                    </p>
+                    <h3 className="text-lg font-serif italic text-[#141414]">
+                      {room.category} Suite
                     </h3>
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-black/10"></div>
-                      <p className="text-[10px] font-mono text-black/50 font-medium uppercase tracking-[0.2em]">
-                        {room.category} Standard
-                      </p>
-                    </div>
                   </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-[0.15em]
-                  ${
-                    room.status === "Available"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : room.status === "Occupied"
-                        ? "bg-orange-50 text-orange-700"
-                        : "bg-blue-50 text-blue-700"
-                  }`}
-                  >
-                    {room.status}
-                  </span>
+                  <p className="text-sm font-medium">N$ {room.price}</p>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex justify-between items-end text-xs pt-4 border-t border-black/3">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] text-black/30 font-mono uppercase tracking-widest mb-1">
-                        Standard Rate
-                      </span>
-                      <span className="text-xl font-serif italic font-medium text-black/80">
-                        N$ {room.price}
-                      </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedBookingRoom(room)}
+                    className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all"
+                  >
+                    Check In
+                  </button>
+                  {canManage && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => startEdit(room)}
+                        className="p-2.5 bg-gray-50 border border-black/5 rounded-xl hover:bg-gray-100 transition-colors text-black/40"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => deleteRoom(room.id)}
+                        className="p-2.5 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors text-red-400"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                  </div>
-
-                  {room.additionalServices &&
-                    room.additionalServices.length > 0 && (
-                      <div className="pt-2 border-t border-black/5">
-                        <div className="flex flex-wrap gap-1">
-                          {room.additionalServices.map((s, i) => (
-                            <span
-                              key={i}
-                              className="text-[8px] font-mono uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded border border-blue-100"
-                            >
-                              {s.name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  <p className="text-[10px] text-black/50 line-clamp-2 h-7 italic">
-                    {room.description ||
-                      "Premium room with modern essentials..."}
-                  </p>
-
-                  <div className="flex gap-2">
-                    {room.status === "Available" ? (
-                      <button
-                        onClick={() => setSelectedBookingRoom(room)}
-                        className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all shadow-md shadow-black/10"
-                      >
-                        Check In
-                      </button>
-                    ) : (
-                      <button
-                        onClick={async () => {
-                          await updateDoc(doc(db, "rooms", room.id), {
-                            status: "Available",
-                          });
-                        }}
-                        className="flex-1 py-2.5 bg-white text-black border border-black/10 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"
-                      >
-                        Check Out
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -581,207 +523,135 @@ export const RoomsModule = ({
         </div>
       ) : activeSubTab === "bookings" ? (
         <div className="space-y-6">
-          <div className="bg-white p-4 rounded-2xl border border-black/5 flex items-center gap-3">
-            <Search className="text-black/20" size={18} />
-            <input
-              type="text"
-              placeholder="Search by Guest Name or Room Number..."
-              value={bookingSearch}
-              onChange={(e) => setBookingSearch(e.target.value)}
-              className="flex-1 bg-transparent border-none outline-none text-sm"
-            />
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20"
+                size={18}
+              />
+              <input
+                type="text"
+                placeholder="Search bookings by guest or room..."
+                value={bookingSearch}
+                onChange={(e) => setBookingSearch(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 bg-white border border-black/5 rounded-2xl outline-none focus:border-black/10 transition-all shadow-sm text-sm"
+              />
+            </div>
           </div>
 
           <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[#F9F9F8] border-b border-black/5">
-                  <tr>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Guest
+              <table className="w-full text-left border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-[#F9F9F8] border-b border-black/5">
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest">
+                      Guest Detail
                     </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Room
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest">
+                      Stay Period
                     </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Stay Dates
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest">
+                      Unit Details
                     </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Services
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest">
+                      Payment
                     </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Total Price
-                    </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                      Status
-                    </th>
-                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">
+                    <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest text-right">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/5">
-                  {bookings
-                    .filter((b: RoomBooking) => {
-                      const search = bookingSearch.toLowerCase();
-                      const matchesSearch =
-                        b.guest_name.toLowerCase().includes(search) ||
-                        b.room_number.toLowerCase().includes(search);
-                      return (
-                        (b.status === "Pending" || b.status === "Checked In") &&
-                        matchesSearch
-                      );
-                    })
-                    .map((booking: RoomBooking) => (
-                      <tr
-                        key={booking.id}
-                        className="hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="p-6">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm">
+                  {searchedBookings.map((booking) => (
+                    <tr
+                      key={booking.id}
+                      className="hover:bg-gray-50/50 transition-colors"
+                    >
+                      <td className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center">
+                            <ClipboardList
+                              size={18}
+                              className="text-black/40"
+                            />
+                          </div>
+                          <div>
+                            <p className="font-medium text-[#141414]">
                               {booking.guest_name}
+                            </p>
+                            <p className="text-[10px] font-mono text-black/30">
+                              {booking.guest_email || "No email provided"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-medium">
+                              {format(parseISO(booking.check_in), "dd MMM")}
                             </span>
-                            <span className="text-[10px] text-black/40 font-mono">
-                              {booking.guest_email}
+                            <span className="text-black/20">â†’</span>
+                            <span className="font-medium">
+                              {format(parseISO(booking.check_out), "dd MMM")}
                             </span>
                           </div>
-                        </td>
-                        <td className="p-6">
-                          <div className="flex items-center gap-3">
-                            <span className="w-8 h-8 rounded-lg bg-black/5 flex items-center justify-center text-[10px] font-mono font-bold text-black/40">
-                              {booking.room_number.match(/^[A-Z]+/)?.[0] ||
-                                "RM"}
-                            </span>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-serif italic font-medium leading-none">
-                                #{booking.room_number.replace(/^[A-Z]+/, "")}
-                              </span>
-                              <span className="text-[9px] font-mono text-black/30 uppercase tracking-widest mt-1">
-                                Confirmed Unit
-                              </span>
-                            </div>
+                          <p className="text-[10px] font-mono text-black/30 uppercase">
+                            {differenceInDays(
+                              parseISO(booking.check_out),
+                              parseISO(booking.check_in),
+                            )}{" "}
+                            Nights
+                          </p>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="text-center bg-gray-50 px-3 py-2 rounded-xl border border-black/5">
+                            <p className="text-[8px] font-mono uppercase text-black/30">
+                              Unit
+                            </p>
+                            <p className="font-serif italic font-bold">
+                              {booking.room_number}
+                            </p>
                           </div>
-                        </td>
-                        <td className="p-6">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium">
-                              {format(parseISO(booking.check_in), "MMM dd")} -{" "}
-                              {format(parseISO(booking.check_out), "MMM dd")}
-                            </span>
-                            <span className="text-[10px] text-black/40 font-mono">
-                              {differenceInDays(
-                                parseISO(booking.check_out),
-                                parseISO(booking.check_in),
-                              )}{" "}
-                              Nights
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-6">
-                          <div className="flex flex-col gap-1">
-                            {booking.breakfast_included && (
-                              <span className="text-[10px] text-emerald-600 font-mono uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded w-fit">
-                                Breakfast
-                              </span>
-                            )}
-                            {booking.additional_services?.map(
-                              (svc: string, i: number) => (
-                                <span
-                                  key={i}
-                                  className="text-[10px] text-blue-600 font-mono uppercase tracking-tighter bg-blue-50 px-1.5 py-0.5 rounded w-fit"
-                                >
-                                  {svc}
-                                </span>
-                              ),
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-6">
-                          <span className="text-sm font-serif italic font-medium">
-                            N$ {booking.total_price}
+                          <span
+                            className={`px-2 py-1 rounded-lg text-[9px] font-mono uppercase
+                            ${
+                              booking.status === "Active" ||
+                              booking.status === "Checked In"
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                : "bg-orange-50 text-orange-600 border border-orange-100"
+                            }`}
+                          >
+                            {booking.status}
                           </span>
-                        </td>
-                        <td className="p-6">
-                          <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-[10px] font-mono uppercase animate-pulse">
-                            Pending
-                          </span>
-                        </td>
-                        <td className="p-6 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => setSelectedFolioBooking(booking)}
-                              className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center gap-2"
-                            >
-                              <Receipt size={14} /> Manage Folio
-                            </button>
-                            {booking.status === "Pending" && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const batch = writeBatch(db);
-                                    batch.update(
-                                      doc(db, "room_bookings", booking.id),
-                                      { status: "Confirmed" },
-                                    );
-                                    const bookedRoom = rooms.find(
-                                      (room) =>
-                                        room.number === booking.room_number,
-                                    );
-                                    if (bookedRoom) {
-                                      batch.update(
-                                        doc(db, "rooms", bookedRoom.id),
-                                        { status: "Occupied" },
-                                      );
-                                    }
-                                    await batch.commit();
-
-                                    await logger.info(
-                                      "BOOKING",
-                                      "CONFIRM_BOOKING",
-                                      `Staff confirmed booking for ${booking.guest_name} in Room ${booking.room_number}`,
-                                      undefined, // In a real scenario, we'd pass the current staff user ID
-                                      "Staff User",
-                                      {
-                                        bookingId: booking.id,
-                                        roomNumber: booking.room_number,
-                                      },
-                                    );
-
-                                    await createWorkflowNotification({
-                                      userId: booking.guest_uid,
-                                      title: "Stay Confirmed!",
-                                      message: `Your stay in Room ${booking.room_number} is confirmed.`,
-                                      type: "system",
-                                    });
-                                  } catch (err) {
-                                    handleFirestoreError(
-                                      err,
-                                      OperationType.UPDATE,
-                                      "room_bookings",
-                                    );
-                                  }
-                                }}
-                                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2"
-                              >
-                                Confirm & Notify
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  {bookings.filter((b: RoomBooking) => b.status === "Pending")
-                    .length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="p-12 text-center text-black/20 font-mono text-sm italic"
-                      >
-                        No pending booking requests.
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <p className="font-serif italic text-sm font-bold">
+                          N$ {booking.total_price}
+                        </p>
+                        <p className="text-[9px] font-mono uppercase text-black/30">
+                          via {booking.payment_method || "N/A"}
+                        </p>
+                      </td>
+                      <td className="p-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setSelectedFolioBooking(booking)}
+                            className="p-2.5 bg-black text-white rounded-xl hover:bg-black/80 transition-all shadow-md flex items-center gap-2"
+                            title="Guest Folio"
+                          >
+                            <Receipt size={14} />
+                            <span className="text-[9px] font-mono uppercase tracking-widest">
+                              Folio
+                            </span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -790,355 +660,263 @@ export const RoomsModule = ({
       ) : activeSubTab === "calendar" ? (
         <BookingCalendar rooms={rooms} bookings={bookings} />
       ) : (
-        <div className="space-y-6">
-          <div className="bg-blue-50 border border-blue-100 p-6 rounded-3xl flex items-center gap-6">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-              <ClipboardList size={24} />
-            </div>
-            <div>
-              <h3 className="text-lg font-serif italic text-blue-900 leading-none mb-1">
-                Service Portfolio
+        <div className="space-y-8">
+          <div className="bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-xl font-serif italic">
+                Accommodation Portfolio
               </h3>
-              <p className="text-[11px] font-mono text-blue-700/60 uppercase tracking-widest">
-                Global metadata shared across all rooms
+              <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest max-w-xs text-right">
+                Global services and add-ons available for selection during room
+                check-in.
               </p>
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {portfolioServices.map((pref) => (
-              <div
-                key={pref.id}
-                className="bg-white p-5 rounded-2xl border border-black/5 flex justify-between items-center group hover:bg-black hover:text-white transition-all cursor-default relative shadow-sm"
-              >
-                <div>
-                  <h4 className="text-xs font-bold font-mono uppercase tracking-tighter mb-1">
-                    {pref.name}
-                  </h4>
-                  <p className="text-lg font-serif italic opacity-60">
-                    N$ {pref.price}
-                  </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {portfolioServices.map((service) => (
+                <div
+                  key={service.id}
+                  className="p-6 bg-gray-50 rounded-2xl border border-black/5 flex justify-between items-center group hover:bg-white hover:border-black/10 transition-all"
+                >
+                  <div>
+                    <h4 className="font-medium text-[#141414]">
+                      {service.name}
+                    </h4>
+                    <p className="text-xs font-serif italic text-black/40 mt-1">
+                      N$ {service.price}
+                    </p>
+                  </div>
+                  {canManage && (
+                    <button
+                      onClick={() => deletePortfolioService(service.id)}
+                      className="p-2 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
-                {canManage && (
-                  <button
-                    onClick={() => deletePreference(pref.id)}
-                    className="p-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-white/10 rounded-lg hover:bg-white/20"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            ))}
+              ))}
+              {canManage && (
+                <button
+                  onClick={() => setIsAddingPref(true)}
+                  className="p-6 rounded-2xl border border-dashed border-black/10 flex items-center justify-center gap-3 text-black/20 hover:text-black/40 hover:border-black/20 transition-all group"
+                >
+                  <Plus
+                    size={20}
+                    className="group-hover:scale-110 transition-transform"
+                  />
+                  <span className="text-xs font-mono uppercase tracking-widest">
+                    Add Global Service
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
+      {/* Booking and Folio Modals */}
+      <AnimatePresence>
+        {selectedBookingRoom && (
+          <BookingModal
+            room={selectedBookingRoom}
+            onClose={() => setSelectedBookingRoom(null)}
+            onSuccess={(msg) => {
+              setSelectedBookingRoom(null);
+              // Handle toast if needed
+            }}
+          />
+        )}
+        {selectedFolioBooking && (
+          <FolioModal
+            booking={selectedFolioBooking}
+            rooms={rooms}
+            folio={folios.find((f) => f.booking_id === selectedFolioBooking.id)}
+            onClose={() => setSelectedFolioBooking(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Add/Edit Room Modal */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-black/5 my-8"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-full max-w-4xl rounded-[2.5rem] p-10 shadow-2xl border border-black/5 overflow-y-auto max-h-[90vh]"
             >
-              <div className="flex justify-between items-center mb-8 pb-4 border-b border-black/5">
+              <div className="flex justify-between items-start mb-10">
                 <div>
-                  <h3 className="text-2xl font-serif italic text-[#141414]">
-                    {editingRoomId
-                      ? `Edit Room ${newRoom.number}`
-                      : "Register New Room"}
+                  <h3 className="text-3xl font-serif italic text-[#141414]">
+                    {editingRoomId ? "Modify Registry" : "New Unit Entry"}
                   </h3>
-                  <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
-                    Direct Cloud Synchronization Active
+                  <p className="text-[10px] font-mono text-black/30 uppercase tracking-[0.3em] mt-2">
+                    Accommodation Management System
                   </p>
                 </div>
                 <button
-                  onClick={() => setIsAdding(false)}
-                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                  onClick={() => {
+                    setIsAdding(false);
+                    setEditingRoomId(null);
+                  }}
+                  className="p-3 bg-black/5 hover:bg-black/10 rounded-full transition-colors text-black/40"
                 >
-                  <X size={24} className="text-black/40" />
+                  <X size={24} />
                 </button>
               </div>
-              <form className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">
-                      Core Setup
-                    </label>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
-                          Category
-                        </label>
-                        <select
-                          value={newRoom.category}
-                          onChange={(e) => {
-                            const cat = e.target.value;
-                            const newPrefix =
-                              cat === "Single"
-                                ? "SR"
-                                : cat === "Double"
-                                  ? "DR"
-                                  : cat === "VIP"
-                                    ? "VR"
-                                    : "PR";
-                            setNewRoom({
-                              ...newRoom,
-                              category: cat,
-                              prefix: newPrefix,
-                              imageUrl:
-                                cat === "Single"
-                                  ? LOCAL_ASSETS.rooms.single
-                                  : cat === "Double"
-                                    ? LOCAL_ASSETS.rooms.double
-                                    : LOCAL_ASSETS.rooms.vip,
-                            });
-                          }}
-                          className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-2 focus:ring-black/5 outline-none transition-all text-xs"
-                        >
-                          <option value="Single">Single Room (SR)</option>
-                          <option value="Double">Double Room (DR)</option>
-                          <option value="VIP">VIP Suite (VR)</option>
-                          <option value="Suite">Presidential (PR)</option>
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
-                            Prefix
-                          </label>
-                          <select
-                            value={newRoom.prefix}
-                            onChange={(e) =>
-                              setNewRoom({ ...newRoom, prefix: e.target.value })
-                            }
-                            className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
-                          >
-                            <option value="SR">SR (Single)</option>
-                            <option value="DR">DR (Double)</option>
-                            <option value="VR">VR (VIP)</option>
-                            <option value="PR">PR (Presidential)</option>
-                            <option value="EX">EX (Executive)</option>
-                          </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="block text-[8px] font-mono uppercase text-black/60 mb-1">
-                            Room #
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. 001"
-                            value={newRoom.number}
-                            onChange={(e) =>
-                              setNewRoom({ ...newRoom, number: e.target.value })
-                            }
-                            className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-mono text-sm"
-                          />
-                        </div>
-                      </div>
+
+              <form
+                onSubmit={handleAddRoom}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-12"
+              >
+                <div className="space-y-8">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                        Prefix
+                      </label>
+                      <select
+                        value={newRoom.prefix}
+                        onChange={(e) =>
+                          setNewRoom({ ...newRoom, prefix: e.target.value })
+                        }
+                        className="w-full px-5 py-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-sm font-bold text-black/60 focus:bg-white focus:border-black/10 transition-all"
+                      >
+                        <option value="SR">SR (Single)</option>
+                        <option value="DR">DR (Double)</option>
+                        <option value="VR">VR (VIP)</option>
+                        <option value="RM">RM (General)</option>
+                      </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">
-                      Pricing & Dining
-                    </label>
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <label className="block text-[8px] font-mono uppercase text-black/60 mb-1 pl-1">
-                          Nightly Rate (N$)
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          value={newRoom.price}
-                          onChange={(e) =>
-                            setNewRoom({
-                              ...newRoom,
-                              price: parseNumberInput(e.target.value),
-                            })
-                          }
-                          className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none font-medium text-sm"
-                        />
-                      </div>
-                      <div className="p-4 bg-emerald-500/300 rounded-2xl border border-emerald-500/10">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              id="bf-toggle-edit"
-                              checked={newRoom.breakfastIncluded}
-                              onChange={(e) =>
-                                setNewRoom({
-                                  ...newRoom,
-                                  breakfastIncluded: e.target.checked,
-                                })
-                              }
-                              className="w-4 h-4 rounded-lg border-emerald-500/20 text-emerald-600 focus:ring-emerald-500/20"
-                            />
-                            <label
-                              htmlFor="bf-toggle-edit"
-                              className="text-[10px] font-mono uppercase text-emerald-800 font-bold"
-                            >
-                              Standard Breakfast
-                            </label>
-                          </div>
-                          {newRoom.breakfastIncluded && (
-                            <span className="text-[10px] font-mono text-emerald-600/60 font-bold">
-                              ACTIVE
-                            </span>
-                          )}
-                        </div>
-                        {newRoom.breakfastIncluded && (
-                          <div className="flex items-center justify-between pt-2 border-t border-emerald-500/5">
-                            <span className="text-[9px] font-mono text-emerald-700/50 uppercase">
-                              Service Price
-                            </span>
-                            <input
-                              type="number"
-                              value={newRoom.breakfastPrice}
-                              onChange={(e) =>
-                                setNewRoom({
-                                  ...newRoom,
-                                  breakfastPrice: parseNumberInput(
-                                    e.target.value,
-                                  ),
-                                })
-                              }
-                              className="w-20 p-1 bg-transparent border-b border-emerald-500/10 text-right text-xs font-mono focus:border-emerald-500 outline-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest italic">
-                      Inventory Media
-                    </label>
-                    <div className="space-y-3">
-                      <div className="aspect-video w-full rounded-2xl overflow-hidden bg-gray-100 border border-black/5 relative group">
-                        <img
-                          loading="lazy"
-                          src={newRoom.imageUrl}
-                          alt="Room Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <p className="text-[10px] text-white font-mono uppercase tracking-widest">
-                            Selected Image
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-xl border border-black/5">
-                        {(newRoom.category === "Single"
-                          ? LOCAL_ASSETS.rooms.singleGallery
-                          : newRoom.category === "Double"
-                            ? LOCAL_ASSETS.rooms.doubleGallery
-                            : [
-                                ...LOCAL_ASSETS.rooms.singleGallery,
-                                ...LOCAL_ASSETS.rooms.doubleGallery,
-                                ...LOCAL_ASSETS.rooms.exterior,
-                              ]
-                        ).map((img, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() =>
-                              setNewRoom({ ...newRoom, imageUrl: img })
-                            }
-                            className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${newRoom.imageUrl === img ? "border-black scale-90" : "border-transparent opacity-60 hover:opacity-100"}`}
-                          >
-                            <img
-                              loading="lazy"
-                              src={img}
-                              className="w-full h-full object-cover"
-                              alt={`Option ${idx}`}
-                            />
-                          </button>
-                        ))}
-                      </div>
-
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                        Unit Number
+                      </label>
                       <input
                         type="text"
-                        placeholder="Or paste a custom Image URL..."
-                        value={newRoom.imageUrl}
+                        required
+                        value={newRoom.number}
                         onChange={(e) =>
-                          setNewRoom({ ...newRoom, imageUrl: e.target.value })
+                          setNewRoom({ ...newRoom, number: e.target.value })
                         }
-                        className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-[9px] text-black/40 font-mono italic"
+                        className="w-full px-5 py-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-sm font-bold focus:bg-white focus:border-black/10 transition-all"
+                        placeholder="e.g. 101"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-3 font-bold tracking-widest italic">
-                      Room Description
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                      Suite Category
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {["Single", "Double", "VIP"].map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() =>
+                            setNewRoom({ ...newRoom, category: cat as any })
+                          }
+                          className={`py-3 rounded-xl border text-[10px] font-mono uppercase tracking-widest transition-all
+                            ${newRoom.category === cat ? "bg-black text-white border-black" : "bg-gray-50 text-black/40 border-black/5"}`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                        Nightly Rate (N$)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={newRoom.price}
+                        onChange={(e) =>
+                          setNewRoom({
+                            ...newRoom,
+                            price: parseNumberInput(e.target.value),
+                          })
+                        }
+                        className="w-full px-5 py-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-sm font-bold focus:bg-white focus:border-black/10 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                        Registry Status
+                      </label>
+                      <select
+                        value={newRoom.status}
+                        onChange={(e) =>
+                          setNewRoom({
+                            ...newRoom,
+                            status: e.target.value as any,
+                          })
+                        }
+                        className="w-full px-5 py-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-sm font-bold text-black/60 focus:bg-white focus:border-black/10 transition-all"
+                      >
+                        <option value="Available">Available</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Cleaning">Cleaning</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40 ml-1">
+                      Brief Description
                     </label>
                     <textarea
-                      placeholder="Craft a compelling description..."
                       value={newRoom.description}
                       onChange={(e) =>
                         setNewRoom({ ...newRoom, description: e.target.value })
                       }
-                      className="w-full h-28 p-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-xs leading-relaxed italic text-black/70 resize-none font-serif"
+                      rows={3}
+                      className="w-full px-5 py-4 bg-gray-50 border border-black/5 rounded-2xl outline-none text-sm focus:bg-white focus:border-black/10 transition-all resize-none"
+                      placeholder="Highlight key features..."
                     />
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center pb-2 border-b border-black/5">
-                      <label className="block text-[10px] font-mono uppercase text-black/40 font-bold tracking-widest">
-                        Premium Metadata
-                      </label>
-                      <select
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            const [name, price] = val.split("|");
-                            if (
-                              !newRoom.additionalServices.find(
-                                (s) => s.name === name,
-                              )
-                            ) {
-                              setNewRoom({
-                                ...newRoom,
-                                additionalServices: [
-                                  ...newRoom.additionalServices,
-                                  { name, price: parseNumberInput(price) },
-                                ],
-                              });
-                            }
+                </div>
+
+                <div className="space-y-10">
+                  <div className="bg-[#F9F9F8] p-8 rounded-3xl border border-black/5">
+                    <div className="flex justify-between items-center mb-6">
+                      <h4 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-black/40">
+                        Unit Services
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-mono uppercase text-emerald-600 font-bold">
+                          {newRoom.breakfastIncluded ? "Breakfast Active" : ""}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={newRoom.breakfastIncluded}
+                          onChange={(e) =>
+                            setNewRoom({
+                              ...newRoom,
+                              breakfastIncluded: e.target.checked,
+                            })
                           }
-                          e.target.value = "";
-                        }}
-                        className="text-[9px] font-mono uppercase bg-black text-white px-3 py-1.5 rounded-lg outline-none cursor-pointer tracking-tighter"
-                      >
-                        <option value="">+ Add Service</option>
-                        {portfolioServices.map((pref) => (
-                          <option
-                            key={pref.id}
-                            value={`${pref.name}|${pref.price}`}
-                          >
-                            {pref.name} (N$ {pref.price})
-                          </option>
-                        ))}
-                      </select>
+                          className="w-4 h-4 rounded border-black/10 text-black focus:ring-black"
+                        />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-2">
+
+                    <div className="space-y-3">
                       {newRoom.additionalServices.map((s, i) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between px-4 py-2.5 bg-black/2 border border-black/5 rounded-xl text-[10px] font-mono group hover:bg-black hover:text-white transition-all cursor-default"
+                          className="flex items-center justify-between p-4 bg-white rounded-xl border border-black/5 group hover:bg-black hover:text-white transition-all duration-300"
                         >
-                          <span className="font-bold tracking-tight">
-                            {s.name}
-                          </span>
-                          <div className="flex items-center gap-3">
-                            <span className="opacity-40">N$ {s.price}</span>
+                          <span className="text-xs font-medium">{s.name}</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-[10px] font-mono">
+                              N$ {s.price}
+                            </span>
                             <button
                               type="button"
                               onClick={() =>
@@ -1193,20 +971,13 @@ export const RoomsModule = ({
                   onClick={() => {
                     setIsAddingPref(false);
                     setPortfolioFormError(null);
-                    setNewPref({ name: "", price: "" });
                   }}
-                  className="text-black/20 hover:text-black"
+                  className="text-black/20 hover:text-black transition-colors"
                 >
-                  <X size={24} />
+                  <X size={20} />
                 </button>
               </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleAddPortfolioService();
-                }}
-                className="space-y-4"
-              >
+              <form onSubmit={handleAddPortfolioService} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
                     Service Name
@@ -1215,62 +986,41 @@ export const RoomsModule = ({
                     type="text"
                     required
                     value={newPref.name}
-                    onChange={(e) => {
-                      setPortfolioFormError(null);
-                      setNewPref({ ...newPref, name: e.target.value });
-                    }}
-                    placeholder="e.g. Guided City Tour"
+                    onChange={(e) =>
+                      setNewPref({ ...newPref, name: e.target.value })
+                    }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                    Standard Price (N$)
+                    Base Price (N$)
                   </label>
                   <input
                     type="number"
                     required
-                    min="0"
-                    step="0.01"
                     value={newPref.price}
-                    onChange={(e) => {
-                      setPortfolioFormError(null);
-                      setNewPref({ ...newPref, price: e.target.value });
-                    }}
+                    onChange={(e) =>
+                      setNewPref({ ...newPref, price: e.target.value })
+                    }
                     className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none"
                   />
                 </div>
                 {portfolioFormError && (
-                  <p className="text-sm text-red-600">{portfolioFormError}</p>
+                  <p className="text-red-500 text-[10px] font-mono italic">
+                    {portfolioFormError}
+                  </p>
                 )}
                 <button
-                  type="submit"
                   disabled={isSavingPref}
-                  className="w-full py-4 bg-blue-600 text-white rounded-xl font-medium mt-4 shadow-lg shadow-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                  type="submit"
+                  className="w-full py-4 bg-blue-600 text-white rounded-xl font-medium mt-4 hover:bg-blue-700 transition-all"
                 >
-                  {isSavingPref
-                    ? "Saving Portfolio Service..."
-                    : "Register Service Portfolio"}
+                  {isSavingPref ? "Saving..." : "Add to Portfolio"}
                 </button>
               </form>
             </motion.div>
           </div>
-        )}
-
-        {selectedBookingRoom && (
-          <BookingModal
-            room={selectedBookingRoom}
-            onClose={() => setSelectedBookingRoom(null)}
-            onSuccess={(msg) => alert(msg)}
-          />
-        )}
-        {selectedFolioBooking && (
-          <FolioModal
-            booking={selectedFolioBooking}
-            folio={folios.find((f) => f.booking_id === selectedFolioBooking.id)}
-            rooms={rooms}
-            onClose={() => setSelectedFolioBooking(null)}
-          />
         )}
       </AnimatePresence>
     </div>
