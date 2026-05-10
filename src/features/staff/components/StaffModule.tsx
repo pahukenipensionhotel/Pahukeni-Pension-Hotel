@@ -264,6 +264,7 @@ export const StaffModule = ({
                     </div>
                   </td>
                   <td className="p-6">
+                    {activeSubTab === "staff" ? (
                       <select
                         value={user.role}
                         onChange={(e) =>
@@ -313,7 +314,7 @@ export const StaffModule = ({
                         </select>
                       </div>
                     )}
-                  </td>
+                  </td>{" "}
                   <td className="p-6 text-sm font-mono text-black/60">
                     {user.username}
                   </td>
@@ -433,7 +434,9 @@ export const StaffModule = ({
                         })
                       }
                       className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
-                    >                      {ROLES.map((role) => (
+                    >
+                      {" "}
+                      {ROLES.map((role) => (
                         <option key={role} value={role}>
                           {role}
                         </option>
