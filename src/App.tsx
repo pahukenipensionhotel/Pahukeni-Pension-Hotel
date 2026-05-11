@@ -292,11 +292,11 @@ export default function App() {
     <>
       <NetworkStatusBanner />
       <AppErrorBoundary>
-        <div className="min-h-screen bg-[#E4E3E0] flex flex-col lg:flex-row">
+        <div className="h-screen bg-[#E4E3E0] flex flex-col lg:flex-row overflow-hidden">
           {/* Mobile Header */}
-          <div className="lg:hidden bg-[#141414] text-white p-4 flex items-center justify-between sticky top-0 z-50 shadow-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center p-1.5">
+          <div className="lg:hidden bg-[#141414] text-white p-6 flex items-center justify-between sticky top-0 z-50 shadow-lg">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center p-2">
                 <img
                   src={IMAGE_CATALOG.logo}
                   alt="Logo"
@@ -305,10 +305,10 @@ export default function App() {
                 />
               </div>
               <div>
-                <h1 className="text-lg font-serif italic leading-none">
+                <h1 className="text-xl font-serif italic leading-none">
                   Pahukeni
                 </h1>
-                <p className="text-[8px] font-mono text-white/40 uppercase tracking-widest mt-1">
+                <p className="text-[10px] font-mono text-white/40 uppercase tracking-widest mt-1">
                   Pension Hotel
                 </p>
               </div>
@@ -317,7 +317,7 @@ export default function App() {
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
-              {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+              {isSidebarOpen ? <X size={28} /> : <Menu size={28} />}
             </button>
           </div>
 
@@ -334,27 +334,27 @@ export default function App() {
           </AnimatePresence>
 
           <aside
-            className={`fixed inset-y-0 left-0 w-72 bg-[#141414] text-white flex flex-col z-50 transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+            className={`fixed inset-y-0 left-0 w-80 bg-[#141414] text-white flex flex-col z-50 transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} shadow-2xl lg:shadow-none`}
           >
-            <div className="p-8 hidden lg:block">
-              <div className="flex items-center gap-4 mb-2">
+            <div className="p-10 hidden lg:block">
+              <div className="flex items-center gap-5 mb-2">
                 <img
                   src={IMAGE_CATALOG.logo}
                   alt="Logo"
-                  className="w-10 h-10 rounded-xl"
+                  className="w-12 h-12 rounded-2xl"
                   loading="lazy"
                 />
                 <div>
-                  <h1 className="text-2xl font-serif italic leading-none">
+                  <h1 className="text-3xl font-serif italic leading-none">
                     Pahukeni
                   </h1>
-                  <p className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em] mt-1">
+                  <p className="text-[12px] font-mono text-white/40 uppercase tracking-[0.25em] mt-1">
                     Pension Hotel
                   </p>
                 </div>
               </div>
             </div>
-            <nav className="flex-1 px-4 space-y-2 mt-8 lg:mt-0">
+            <nav className="flex-1 px-6 space-y-3 mt-8 lg:mt-0 overflow-y-auto custom-scrollbar">
               {filteredMenuItems.map((item) => (
                 <button
                   key={item.id}
@@ -362,49 +362,49 @@ export default function App() {
                     setActiveTab(item.id);
                     setIsSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${activeTab === item.id ? "bg-white/10 text-white" : "text-white/40 hover:text-white hover:bg-white/5"}`}
+                  className={`w-full flex items-center gap-5 px-5 py-4 rounded-2xl transition-all group ${activeTab === item.id ? "bg-white/10 text-white shadow-lg" : "text-white/40 hover:text-white hover:bg-white/5"}`}
                 >
                   <item.icon
-                    size={18}
+                    size={20}
                     className={
                       activeTab === item.id
                         ? "text-white"
                         : "text-white/40 group-hover:text-white"
                     }
                   />
-                  <span className="text-sm font-medium">{item.label}</span>
+                  <span className="text-base font-medium">{item.label}</span>
                 </button>
               ))}
             </nav>
-            <div className="p-4 mt-auto">
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                    <Users size={14} />
+            <div className="p-6 mt-auto">
+              <div className="bg-white/5 p-5 rounded-4xl border border-white/5 mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/5">
+                    <Users size={16} />
                   </div>
                   <div className="overflow-hidden">
-                    <p className="text-xs font-medium truncate">
+                    <p className="text-sm font-semibold truncate">
                       {user?.name || "Administrator"}
                     </p>
-                    <p className="text-[10px] font-mono text-white/30 uppercase">
+                    <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
                       {user?.role || "Admin"}
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="space-y-2 mb-4">
+              <div className="space-y-3 mb-6">
                 <a
                   href="https://www.facebook.com/share/1BWf2e46F7/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/5 text-white/60 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  className="flex items-center gap-4 bg-white/5 p-5 rounded-2xl border border-white/5 text-white/60 hover:text-blue-400 hover:bg-blue-500/10 transition-all hover:scale-[1.02] active:scale-95"
                 >
                   <img
                     src={IMAGE_CATALOG.facebook}
-                    className="w-3.5 h-4 object-contain"
+                    className="w-4 h-4 object-contain"
                     alt="Facebook"
                   />
-                  <span className="text-[10px] font-mono uppercase tracking-widest">
+                  <span className="text-[11px] font-mono uppercase tracking-widest">
                     Facebook Page
                   </span>
                 </a>
@@ -412,36 +412,36 @@ export default function App() {
                   href="https://wa.me/264818202171"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/5 text-white/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                  className="flex items-center gap-4 bg-white/5 p-5 rounded-2xl border border-white/5 text-white/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all hover:scale-[1.02] active:scale-95"
                 >
                   <img
                     src={IMAGE_CATALOG.whatsapp}
-                    className="w-4 h-4 object-contain"
+                    className="w-5 h-5 object-contain"
                     alt="WhatsApp"
                   />
-                  <span className="text-[10px] font-mono uppercase tracking-widest">
+                  <span className="text-[11px] font-mono uppercase tracking-widest">
                     WhatsApp Chat
                   </span>
                 </a>
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-4 px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+                className="w-full flex items-center gap-4 px-6 py-4 text-red-400 hover:bg-red-400/10 rounded-2xl transition-all active:scale-95"
               >
-                <LogOut size={18} />
-                <span className="text-sm font-medium">Logout</span>
+                <LogOut size={20} />
+                <span className="text-base font-semibold">Logout</span>
               </button>
             </div>
           </aside>
 
-          <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto">
-            <div className="max-w-7xl mx-auto w-full">
-              <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 md:mb-12 gap-4">
+          <main className="flex-1 p-6 md:p-12 lg:p-16 overflow-y-auto custom-scrollbar relative bg-[#E4E3E0]">
+            <div className="max-w-8xl mx-auto w-full">
+              <header className="flex flex-col md:flex-row md:items-center justify-between mb-12 md:mb-16 gap-6">
                 <div>
-                  <h2 className="text-2xl md:text-3xl font-serif italic text-[#141414] capitalize">
+                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic text-[#141414] capitalize tracking-tight">
                     {activeTab}
                   </h2>
-                  <p className="text-[10px] md:text-xs font-mono text-black/40 uppercase tracking-widest mt-1">
+                  <p className="text-[11px] md:text-xs font-mono text-black/30 uppercase tracking-[0.4em] mt-3 ml-1">
                     {new Date().toLocaleDateString("en-US", {
                       weekday: "long",
                       year: "numeric",
@@ -598,26 +598,34 @@ export default function App() {
           </main>
         </div>
       </AppErrorBoundary>
-      <div className="fixed top-4 right-4 z-100 space-y-4 pointer-events-none">
+      <div className="fixed top-10 right-10 z-100 space-y-4 pointer-events-none max-w-sm w-full">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, x: 20, scale: 0.95 }}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 20, scale: 0.95 }}
-              className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border backdrop-blur-md min-w-75 ${toast.type === "success" ? "bg-emerald-500/90 border-emerald-400 text-white" : toast.type === "error" ? "bg-red-500/90 border-red-400 text-white" : "bg-black/80 border-white/10 text-white"}`}
+              exit={{ opacity: 0, x: 100, scale: 0.9 }}
+              className={`pointer-events-auto p-5 rounded-3xl shadow-2xl border backdrop-blur-md flex items-center gap-4 ${
+                toast.type === "success"
+                  ? "bg-emerald-500/90 border-emerald-400/50 text-white"
+                  : toast.type === "error"
+                    ? "bg-red-500/90 border-red-400/50 text-white"
+                    : "bg-black/80 border-white/10 text-white"
+              }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
                 {toast.type === "success" ? (
-                  <CheckCircle2 size={18} />
+                  <CheckCircle2 size={20} />
                 ) : toast.type === "error" ? (
-                  <AlertCircle size={18} />
+                  <AlertCircle size={20} />
                 ) : (
-                  <Bell size={18} />
+                  <Bell size={20} />
                 )}
-                <p className="text-xs font-medium">{toast.message}</p>
               </div>
+              <p className="text-xs font-bold leading-relaxed">
+                {toast.message}
+              </p>
             </motion.div>
           ))}
         </AnimatePresence>

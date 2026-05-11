@@ -387,71 +387,87 @@ export const CustomerPortal = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-      <div className="fixed top-4 right-4 z-100 space-y-2 pointer-events-none">
+    <div className="h-screen bg-[#F5F5F4] flex flex-col overflow-hidden">
+      {/* Toast Notification Container (Reliably Contained) */}
+      <div className="fixed top-6 right-6 z-100 space-y-3 pointer-events-none max-w-sm">
         <AnimatePresence>
           {toasts.map((n) => (
             <motion.div
               key={n.id}
-              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-black text-white p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 pointer-events-auto min-w-75"
+              className="glass-effect p-5 rounded-3xl shadow-2xl flex items-center gap-4 pointer-events-auto border-black/5"
             >
-              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                <Bell size={16} className="text-white" />
+              <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center shrink-0 shadow-lg">
+                <Bell size={18} className="text-white" />
               </div>
-              <p className="text-sm font-medium">{n.message}</p>
+              <p className="text-xs font-semibold text-[#141414] leading-snug">
+                {n.message}
+              </p>
               <button
                 onClick={() =>
                   setToasts((prev) => prev.filter((notif) => notif.id !== n.id))
                 }
-                className="ml-auto p-1 hover:bg-white/10 rounded-lg"
+                className="ml-auto p-1.5 hover:bg-black/5 rounded-lg transition-colors"
               >
-                <X size={14} />
+                <X size={16} className="text-black/20" />
               </button>
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-      <header className="bg-white border-b border-black/5 p-4 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="bg-white/80 backdrop-blur-md border-b border-black/5 p-6 sticky top-0 z-20">
+        <div className="max-w-8xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-6">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="lg:hidden p-2.5 hover:bg-gray-100 rounded-xl transition-colors"
             >
-              {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 className="text-xl font-serif italic">Pahukeni Portal</h1>
-            <div className="hidden md:flex items-center gap-1 text-[10px] font-mono uppercase text-black/40">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center p-2 shadow-lg">
+                <img
+                  src={IMAGE_CATALOG.logo}
+                  alt="Pahukeni"
+                  className="w-full h-full object-contain invert"
+                />
+              </div>
+              <h1 className="text-2xl font-serif italic tracking-tight">
+                Pahukeni Portal
+              </h1>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Guest Access
+              <span className="text-[10px] font-mono font-bold uppercase text-emerald-700 tracking-wider">
+                Live Concierge
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <div className="relative">
               <button
                 onClick={() =>
                   setShowHotelNotifications(!showHotelNotifications)
                 }
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
+                className="p-2.5 hover:bg-gray-100 rounded-xl transition-colors relative active:scale-95"
               >
-                <Bell size={20} className="text-black/60" />
+                <Bell size={22} className="text-black/60" />
                 {globalHotelNotifications.filter((n) => !n.read).length > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm"></span>
                 )}
               </button>
 
               <AnimatePresence>
                 {showHotelNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 z-50">
+                  <div className="absolute right-0 mt-4 w-96 z-50">
                     <NotificationCenterPanel
                       notifications={globalHotelNotifications}
                       onClose={() => setShowHotelNotifications(false)}
                       onMarkAsRead={markHotelNotificationAsRead}
-                      onNavigate={(type, title) => {
+                      onNavigate={(type) => {
                         if (type === "order") setActiveTab("orders");
                         if (type === "laundry") setActiveTab("laundry");
                         if (type === "conference") setActiveTab("conference");
@@ -461,21 +477,26 @@ export const CustomerPortal = ({
                 )}
               </AnimatePresence>
             </div>
-            <span className="text-xs font-mono text-black/60 hidden sm:block">
-              {user.name}
-            </span>
+            <div className="hidden sm:flex flex-col items-end mr-2">
+              <span className="text-sm font-bold text-[#141414]">
+                {user.name}
+              </span>
+              <span className="text-[9px] font-mono text-black/30 uppercase tracking-widest font-black">
+                Valued Guest
+              </span>
+            </div>
             <button
               onClick={() => signOut(auth)}
-              className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+              className="p-3 bg-red-50 hover:bg-red-500 hover:text-white text-red-600 rounded-xl transition-all active:scale-90 shadow-sm"
               title="Sign Out"
             >
-              <LogOut size={18} />
+              <LogOut size={20} />
             </button>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 relative">
+      <div className="flex-1 max-w-8xl mx-auto w-full p-6 md:p-12 lg:p-16 grid grid-cols-1 lg:grid-cols-4 gap-12 relative overflow-hidden">
         <AnimatePresence>
           {isMenuOpen && (
             <motion.div
@@ -483,7 +504,7 @@ export const CustomerPortal = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMenuOpen(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
             />
           )}
         </AnimatePresence>
@@ -491,29 +512,31 @@ export const CustomerPortal = ({
         <AnimatePresence>
           {isMenuOpen && (
             <motion.aside
-              initial={{ x: -300 }}
+              initial={{ x: -350 }}
               animate={{ x: 0 }}
-              exit={{ x: -300 }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed top-0 left-0 bottom-0 w-64 bg-white z-40 p-6 shadow-2xl lg:hidden flex flex-col"
+              exit={{ x: -350 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed top-0 left-0 bottom-0 w-80 bg-white z-40 p-10 shadow-2xl lg:hidden flex flex-col"
             >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-serif italic">Menu</h2>
+              <div className="flex items-center justify-between mb-12">
+                <h2 className="text-3xl font-serif italic tracking-tight text-[#141414]">
+                  Concierge
+                </h2>
                 <button
                   onClick={() => setIsMenuOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className="p-3 bg-gray-50 rounded-full text-black/40"
                 >
-                  <X size={20} />
+                  <X size={24} />
                 </button>
               </div>
-              <div className="space-y-2 flex-1">
+              <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
                 {[
-                  { id: "home", label: "Home", icon: HomeIcon },
-                  { id: "rooms", label: "Rooms", icon: Bed },
+                  { id: "home", label: "Overview", icon: HomeIcon },
+                  { id: "rooms", label: "Accommodation", icon: Bed },
                   { id: "dining", label: "Dining", icon: Utensils },
                   { id: "laundry", label: "Laundry", icon: WashingMachine },
-                  { id: "conference", label: "Conference", icon: Users },
-                  { id: "orders", label: "My Orders", icon: ClipboardList },
+                  { id: "conference", label: "Events", icon: Users },
+                  { id: "orders", label: "My History", icon: ClipboardList },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -521,112 +544,87 @@ export const CustomerPortal = ({
                       setActiveTab(item.id);
                       setIsMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                    className={`w-full flex items-center gap-5 p-5 rounded-3xl transition-all ${
                       activeTab === item.id
-                        ? "bg-black text-white shadow-lg shadow-black/10"
+                        ? "bg-black text-white shadow-2xl shadow-black/20"
                         : "bg-white text-black/60 hover:bg-gray-50 border border-black/5"
                     }`}
                   >
-                    <item.icon size={18} />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <item.icon size={20} />
+                    <span className="text-base font-semibold">
+                      {item.label}
+                    </span>
                   </button>
                 ))}
-                <a
-                  href="https://www.facebook.com/share/1BWf2e46F7/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all border border-blue-100/50 mt-2"
-                >
-                  <img
-                    src={LOCAL_ASSETS.facebook}
-                    className="w-5 h-5 object-contain"
-                    alt="Facebook"
-                  />
-                  <span className="text-sm font-medium">
-                    Follow us on Facebook
-                  </span>
-                </a>
-                <a
-                  href="https://wa.me/264818202171"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 p-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-100 mt-2"
-                >
-                  <img
-                    src={LOCAL_ASSETS.whatsapp}
-                    className="w-5 h-5 object-contain"
-                    alt="WhatsApp"
-                  />
-                  <span className="text-sm font-medium">Chat on WhatsApp</span>
-                </a>
-              </div>
-              <div className="pt-6 border-t border-black/5">
-                <button
-                  onClick={() => signOut(auth)}
-                  className="w-full flex items-center gap-3 p-4 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                >
-                  <LogOut size={18} />
-                  <span className="text-sm font-medium">Sign Out</span>
-                </button>
               </div>
             </motion.aside>
           )}
         </AnimatePresence>
 
-        <aside className="hidden lg:block lg:col-span-1 space-y-2">
-          {[
-            { id: "home", label: "Home", icon: HomeIcon },
-            { id: "rooms", label: "Rooms", icon: Bed },
-            { id: "dining", label: "Dining", icon: Utensils },
-            { id: "laundry", label: "Laundry", icon: WashingMachine },
-            { id: "conference", label: "Conference", icon: Users },
-            { id: "orders", label: "My Orders", icon: ClipboardList },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
-                activeTab === item.id
-                  ? "bg-black text-white shadow-lg shadow-black/10"
-                  : "bg-white text-black/60 hover:bg-gray-50 border border-black/5"
-              }`}
-            >
-              <item.icon size={18} />
-              <span className="text-sm font-medium">{item.label}</span>
-            </button>
-          ))}
-          <div className="pt-4 space-y-2">
+        <aside className="hidden lg:block lg:col-span-1 space-y-4">
+          <div className="space-y-3">
+            {[
+              { id: "home", label: "Overview", icon: HomeIcon },
+              { id: "rooms", label: "Accommodation", icon: Bed },
+              { id: "dining", label: "Dining", icon: Utensils },
+              { id: "laundry", label: "Laundry", icon: WashingMachine },
+              { id: "conference", label: "Events", icon: Users },
+              { id: "orders", label: "My History", icon: ClipboardList },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-5 p-5 rounded-[1.5rem] transition-all ${
+                  activeTab === item.id
+                    ? "bg-black text-white shadow-2xl shadow-black/20 scale-[1.02]"
+                    : "bg-white text-black/50 hover:text-black hover:bg-white border border-black/5 shadow-sm hover:shadow-md"
+                }`}
+              >
+                <item.icon size={20} />
+                <span className="text-base font-semibold">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-8 space-y-3">
+            <p className="text-[10px] font-mono font-black uppercase text-black/20 tracking-[0.3em] ml-5 mb-4">
+              Connect With Us
+            </p>
             <a
               href="https://www.facebook.com/share/1BWf2e46F7/"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all border border-blue-100/50"
+              className="w-full flex items-center gap-4 p-5 rounded-2xl bg-blue-50/50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm hover:shadow-lg active:scale-95"
             >
               <img
                 src={LOCAL_ASSETS.facebook}
-                className="w-5 h-5 object-contain"
+                className="w-5 h-5 object-contain transition-all group-hover:brightness-0 group-hover:invert"
                 alt="Facebook"
               />
-              <span className="text-sm font-medium">Follow us on Facebook</span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                Facebook
+              </span>
             </a>
             <a
               href="https://wa.me/264818202171"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-100"
+              className="w-full flex items-center gap-4 p-5 rounded-2xl bg-emerald-50/50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100 shadow-sm hover:shadow-lg active:scale-95"
             >
               <img
                 src={LOCAL_ASSETS.whatsapp}
                 className="w-5 h-5 object-contain"
                 alt="WhatsApp"
               />
-              <span className="text-sm font-medium">Chat on WhatsApp</span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                WhatsApp
+              </span>
             </a>
           </div>
         </aside>
 
-        <main className="lg:col-span-3">
-          <AnimatePresence initial={false} mode="sync">
+        <main className="lg:col-span-3 h-full overflow-y-auto custom-scrollbar pr-4">
+          <AnimatePresence initial={false} mode="wait">
             {activeTab === "home" && (
               <motion.div
                 key="home"
@@ -856,13 +854,13 @@ export const CustomerPortal = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-6">
                   {rooms.map((room) => (
                     <div
                       key={room.id}
-                      className="bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm group"
+                      className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm group hover:shadow-xl transition-all"
                     >
-                      <div className="aspect-video overflow-hidden relative">
+                      <div className="aspect-[16/10] overflow-hidden relative">
                         <img
                           loading="lazy"
                           src={getRoomImage(room)}
@@ -870,61 +868,51 @@ export const CustomerPortal = ({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-mono uppercase tracking-wider">
+                        <div className="absolute top-3 right-3 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-lg text-[8px] font-mono font-bold uppercase tracking-wider">
                           {room.category}
                         </div>
                       </div>
-                      <div className="p-6">
-                        <div className="flex justify-between items-start mb-2">
+                      <div className="p-5 space-y-4">
+                        <div className="flex justify-between items-start">
                           <div>
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <span className="px-2 py-0.5 bg-black/4 border border-black/5 rounded-sm text-[8px] font-mono text-black/40 font-bold uppercase tracking-widest shadow-inner">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="px-1.5 py-0.5 bg-black/5 rounded text-[7px] font-mono text-black/40 font-bold uppercase tracking-widest">
                                 {room.number.match(/^[A-Z]+/)?.[0] || "RM"}
                               </span>
-                              <span className="text-[10px] font-mono text-black/20 font-medium uppercase tracking-[0.2em] border-l border-black/5 pl-2">
-                                UNIT REGISTRY
-                              </span>
+                              <h3 className="text-xl font-serif font-black tracking-tight text-[#141414] leading-none">
+                                {room.number.replace(/^[A-Z]+/, "")}
+                              </h3>
                             </div>
-                            <h3 className="text-4xl font-serif font-black tracking-tight text-[#141414] leading-none mb-1">
-                              {room.number.replace(/^[A-Z]+/, "")}
-                            </h3>
                             <p
-                              className={`text-[9px] font-mono font-medium uppercase tracking-[0.15em] ${
+                              className={`text-[8px] font-mono font-bold uppercase tracking-widest ${
                                 getRoomDisplayStatus(room) === "Available"
                                   ? "text-emerald-600"
                                   : "text-orange-600"
                               }`}
                             >
-                              {room.category} Standard •{" "}
                               {getRoomDisplayStatus(room)}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-2xl font-serif font-black text-[#141414]">
+                            <p className="text-lg font-serif font-black text-[#141414] leading-none">
                               N$ {room.price}
                             </p>
-                            <p className="text-[9px] text-black/30 font-mono font-medium uppercase tracking-widest">
-                              Base Nightly Rate
+                            <p className="text-[7px] text-black/30 font-mono font-bold uppercase tracking-tighter">
+                              Per Night
                             </p>
                           </div>
                         </div>
 
-                        {room.description && (
-                          <p className="text-sm text-black/60 line-clamp-2 mb-4 h-10">
-                            {room.description}
-                          </p>
-                        )}
-
-                        <div className="flex gap-3">
+                        <div className="flex gap-2">
                           <button
                             onClick={() => setSelectedRoom(room)}
-                            className="flex-1 py-3 bg-white border border-black/10 text-black rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                            className="flex-1 py-2.5 bg-white border border-black/10 text-[#141414] rounded-xl text-[9px] font-mono font-bold uppercase tracking-widest hover:bg-black/5 transition-all btn-interactive"
                           >
-                            View Details
+                            Details
                           </button>
                           <button
                             onClick={() => setSelectedRoom(room)}
-                            className="flex-1 py-3 bg-black text-white rounded-xl text-sm font-medium hover:bg-black/90 transition-colors"
+                            className="flex-1 py-2.5 bg-black text-white rounded-xl text-[9px] font-mono font-bold uppercase tracking-widest hover:bg-black/90 transition-all shadow-lg active:scale-95 btn-interactive"
                           >
                             Book Now
                           </button>
@@ -957,9 +945,11 @@ export const CustomerPortal = ({
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-serif italic">
-                            N$ {item.price}
-                          </p>
+                          {item.type !== "Bar" && (
+                            <p className="text-sm font-serif italic">
+                              N$ {item.price}
+                            </p>
+                          )}
                           <button
                             onClick={() => placeOrder(item)}
                             disabled={item.status === "Out of Stock"}
@@ -1171,9 +1161,11 @@ export const CustomerPortal = ({
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-serif italic">
-                              N$ {order.total_price}
-                            </p>
+                            {(!("type" in order) || order.type !== "Bar") && (
+                              <p className="text-sm font-serif italic">
+                                N$ {order.total_price}
+                              </p>
+                            )}
                             <span
                               className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
                                 order.status === "Completed" ||

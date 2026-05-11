@@ -157,9 +157,9 @@ export const StaffModule = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col h-full space-y-8 overflow-hidden">
       {/* Sub-tabs Navigation */}
-      <div className="flex border-b border-black/5 gap-8">
+      <div className="flex border-b border-black/5 gap-8 shrink-0">
         <button
           onClick={() => setActiveSubTab("staff")}
           className={`pb-4 text-sm font-medium transition-all relative ${activeSubTab === "staff" ? "text-black" : "text-black/40 hover:text-black"}`}
@@ -192,15 +192,15 @@ export const StaffModule = ({
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h2 className="text-xl md:text-2xl font-serif italic capitalize">
-            {activeSubTab === "staff" ? "Staff Management" : "Guest Management"}
+          <h2 className="text-xl md:text-3xl font-serif italic capitalize tracking-tight text-[#141414]">
+            {activeSubTab === "staff" ? "Staff Registry" : "Guest Registry"}
           </h2>
           <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
             {activeSubTab === "staff"
-              ? `${hotelStaff.length} registered staff members`
-              : `${guests.length} registered guests`}
+              ? `${hotelStaff.length} verified staff members`
+              : `${guests.length} verified guests`}
           </p>
         </div>
         <button
@@ -211,188 +211,198 @@ export const StaffModule = ({
             });
             setIsAdding(true);
           }}
-          className="flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-[#141414] text-white rounded-xl shadow-lg shadow-black/10 hover:bg-black/90 transition-all w-full sm:w-auto text-xs sm:text-sm font-medium"
+          className="flex items-center justify-center gap-3 px-6 py-4 bg-[#141414] text-white rounded-2xl shadow-xl shadow-black/10 hover:bg-black/90 transition-all btn-interactive text-xs font-bold uppercase tracking-widest"
         >
-          <Plus size={16} />
-          <span>Add {activeSubTab === "staff" ? "Staff" : "Guest"}</span>
+          <Plus size={18} />
+          <span>Provision {activeSubTab === "staff" ? "Staff" : "Guest"}</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-200">
-          <thead>
-            <tr className="bg-gray-50 border-b border-black/5">
-              <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                User Details
-              </th>
-              {activeSubTab === "staff" ? (
-                <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                  Role & Account
+      <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="overflow-x-auto overflow-y-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-gray-50/80 backdrop-blur-md border-b border-black/5">
+                <th className="p-8 text-[11px] font-mono font-bold uppercase text-black/40 tracking-[0.2em]">
+                  User Identity
                 </th>
-              ) : (
-                <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                  Booking Status
+                {activeSubTab === "staff" ? (
+                  <th className="p-8 text-[11px] font-mono font-bold uppercase text-black/40 tracking-[0.2em]">
+                    Role & Authority
+                  </th>
+                ) : (
+                  <th className="p-8 text-[11px] font-mono font-bold uppercase text-black/40 tracking-[0.2em]">
+                    Stay Status
+                  </th>
+                )}
+                <th className="p-8 text-[11px] font-mono font-bold uppercase text-black/40 tracking-[0.2em]">
+                  Handle
                 </th>
-              )}
-              <th className="p-6 text-[10px] font-mono uppercase text-black/40">
-                Username
-              </th>
-              <th className="p-6 text-[10px] font-mono uppercase text-black/40 text-right">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(activeSubTab === "staff" ? hotelStaff : guests).map((user) => {
-              const booking = getGuestBooking(user.email, user.id);
-              return (
-                <tr
-                  key={user.id}
-                  className="border-b border-black/5 last:border-0 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center">
-                        <UserIcon size={14} className="text-black/40" />
+                <th className="p-8 text-[11px] font-mono font-bold uppercase text-black/40 tracking-[0.2em] text-right">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/5">
+              {(activeSubTab === "staff" ? hotelStaff : guests).map((user) => {
+                const booking = getGuestBooking(user.email, user.id);
+                return (
+                  <tr
+                    key={user.id}
+                    className="group hover:bg-gray-50/50 transition-colors"
+                  >
+                    <td className="p-8">
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center border border-black/5 group-hover:bg-black group-hover:text-white transition-all duration-500 shadow-sm">
+                          <UserIcon size={20} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-[#141414] text-lg tracking-tight">
+                            {user.name}
+                          </p>
+                          <p className="text-[12px] font-mono text-black/30">
+                            {maskEmail(user.email)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-[10px] font-mono text-black/30">
-                          {maskEmail(user.email)}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-6">
-                    {activeSubTab === "staff" ? (
-                      <select
-                        value={user.role}
-                        onChange={(e) =>
-                          updateRole(user.id, e.target.value as User["role"])
-                        }
-                        className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer"
-                      >
-                        {ROLES.map((role) => (
-                          <option key={role} value={role}>
-                            {role}
-                          </option>
-                        ))}
-                        <option value="Customer">Move to Guests</option>
-                      </select>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {booking ? (
-                          <>
-                            <div
-                              className={`w-2 h-2 rounded-full ${booking.status === "Active" ? "bg-emerald-500" : "bg-orange-500"}`}
-                            />
-                            <span className="text-xs font-medium">
-                              {booking.status} - Room {booking.room_number}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="w-2 h-2 rounded-full bg-gray-300" />
-                            <span className="text-xs text-black/40">
-                              No active bookings
-                            </span>
-                          </>
-                        )}
+                    </td>
+                    <td className="p-8">
+                      {activeSubTab === "staff" ? (
                         <select
                           value={user.role}
                           onChange={(e) =>
                             updateRole(user.id, e.target.value as User["role"])
                           }
-                          className="ml-4 bg-gray-50 px-2 py-1 rounded text-[10px] font-mono uppercase border-none focus:ring-0 cursor-pointer text-black/40 hover:text-black transition-colors"
+                          className="bg-transparent border-none text-sm font-bold text-[#141414] focus:ring-0 cursor-pointer hover:bg-black/5 rounded-xl px-3 py-2 transition-all"
                         >
-                          <option value="Customer">Guest</option>
                           {ROLES.map((role) => (
                             <option key={role} value={role}>
-                              Make {role}
+                              {role}
                             </option>
                           ))}
+                          <option value="Customer">Move to Guests</option>
                         </select>
-                      </div>
-                    )}
-                  </td>{" "}
-                  <td className="p-6 text-sm font-mono text-black/60">
-                    {user.username}
-                  </td>
-                  <td className="p-6 text-right">
-                    <button
-                      onClick={() => deleteUser(user.id)}
-                      className="p-2 text-black/20 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                      title="Delete User"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      ) : (
+                        <div className="flex items-center gap-5">
+                          {booking ? (
+                            <>
+                              <div
+                                className={`w-3 h-3 rounded-full shadow-sm ${booking.status === "Active" || booking.status === "Checked In" ? "bg-emerald-500 animate-pulse" : "bg-orange-500"}`}
+                              />
+                              <span className="text-sm font-bold text-[#141414]">
+                                {booking.status} â€¢ Unit {booking.room_number}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-3 h-3 rounded-full bg-black/5 border border-black/5" />
+                              <span className="text-sm text-black/30 font-medium tracking-tight">
+                                No active registry
+                              </span>
+                            </>
+                          )}
+                          <select
+                            value={user.role}
+                            onChange={(e) =>
+                              updateRole(
+                                user.id,
+                                e.target.value as User["role"],
+                              )
+                            }
+                            className="ml-auto bg-gray-100/50 px-4 py-2 rounded-xl text-[10px] font-mono font-black uppercase border-none focus:ring-0 cursor-pointer text-black/40 hover:text-black hover:bg-white hover:shadow-md transition-all"
+                          >
+                            <option value="Customer">Guest</option>
+                            {ROLES.map((role) => (
+                              <option key={role} value={role}>
+                                Promote to {role}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-8 text-sm font-mono font-bold text-black/40 uppercase tracking-tighter">
+                      @{user.username}
+                    </td>
+                    <td className="p-8 text-right">
+                      <button
+                        onClick={() => deleteUser(user.id)}
+                        className="p-4 text-black/10 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all active:scale-90 shadow-sm hover:shadow-md"
+                        title="Delete User"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Register Dialog */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-black/5"
+              className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-lg border border-black/5"
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-start mb-8">
                 <div>
-                  <h3 className="text-xl font-serif italic">
-                    Add New {activeSubTab === "staff" ? "Staff" : "Guest"}
+                  <h3 className="text-3xl font-serif italic text-[#141414]">
+                    New Account Provision
                   </h3>
-                  <p className="text-[10px] font-mono text-black/40 uppercase mt-1">
-                    Provision a new system account
+                  <p className="text-[10px] font-mono text-black/30 uppercase tracking-[0.3em] mt-2">
+                    Security-First User Registry
                   </p>
                 </div>
                 <button
                   onClick={() => setIsAdding(false)}
-                  className="p-2 hover:bg-black/5 rounded-full transition-colors"
+                  className="p-3 bg-black/5 hover:bg-black/10 rounded-full transition-colors"
                 >
-                  <X size={20} />
+                  <X size={24} />
                 </button>
               </div>
-              <form onSubmit={handleAddMember} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newMember.name}
-                    onChange={(e) =>
-                      setNewMember({ ...newMember, name: e.target.value })
-                    }
-                    className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
-                    placeholder="e.g. John Doe"
-                  />
+              <form onSubmit={handleAddMember} className="space-y-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
+                      Full Identity
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newMember.name}
+                      onChange={(e) =>
+                        setNewMember({ ...newMember, name: e.target.value })
+                      }
+                      className="w-full p-4 bg-gray-50 border border-black/5 rounded-2xl focus:bg-white focus:border-black/10 outline-none transition-all text-sm"
+                      placeholder="e.g. John Doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
+                      System Handle
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newMember.username}
+                      onChange={(e) =>
+                        setNewMember({ ...newMember, username: e.target.value })
+                      }
+                      className="w-full p-4 bg-gray-50 border border-black/5 rounded-2xl focus:bg-white focus:border-black/10 outline-none transition-all text-sm"
+                      placeholder="jdoe_admin"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newMember.username}
-                    onChange={(e) =>
-                      setNewMember({ ...newMember, username: e.target.value })
-                    }
-                    className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                    Email Address
+                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
+                    Verified Email
                   </label>
                   <input
                     type="email"
@@ -401,12 +411,13 @@ export const StaffModule = ({
                     onChange={(e) =>
                       setNewMember({ ...newMember, email: e.target.value })
                     }
-                    className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
+                    className="w-full p-4 bg-gray-50 border border-black/5 rounded-2xl focus:bg-white focus:border-black/10 outline-none transition-all text-sm"
+                    placeholder="verify@domain.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                    Password
+                  <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
+                    Secure Key
                   </label>
                   <input
                     type="password"
@@ -416,14 +427,14 @@ export const StaffModule = ({
                     onChange={(e) =>
                       setNewMember({ ...newMember, password: e.target.value })
                     }
-                    className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
-                    placeholder="Min. 6 characters"
+                    className="w-full p-4 bg-gray-50 border border-black/5 rounded-2xl focus:bg-white focus:border-black/10 outline-none transition-all text-sm"
+                    placeholder="Min. 8 characters"
                   />
                 </div>
                 {activeSubTab === "staff" && (
                   <div>
-                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-1">
-                      Assign Role
+                    <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
+                      Privilege Level
                     </label>
                     <select
                       value={newMember.role}
@@ -433,9 +444,8 @@ export const StaffModule = ({
                           role: e.target.value as User["role"],
                         })
                       }
-                      className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl focus:ring-1 focus:ring-black/5 outline-none transition-all"
+                      className="w-full p-4 bg-gray-50 border border-black/5 rounded-2xl outline-none transition-all text-sm font-bold text-black/60"
                     >
-                      {" "}
                       {ROLES.map((role) => (
                         <option key={role} value={role}>
                           {role}
@@ -446,9 +456,9 @@ export const StaffModule = ({
                 )}
                 <button
                   type="submit"
-                  className="w-full py-4 bg-black text-white rounded-xl font-medium mt-4 hover:bg-black/90 transition-all shadow-lg shadow-black/10"
+                  className="w-full py-5 bg-black text-white rounded-2xl font-bold uppercase tracking-[0.3em] text-[11px] mt-4 hover:bg-black/90 transition-all shadow-2xl shadow-black/20 active:scale-95 btn-interactive"
                 >
-                  Register {activeSubTab === "staff" ? "Staff Member" : "Guest"}
+                  Commit Provisioning
                 </button>
               </form>
             </motion.div>

@@ -354,22 +354,22 @@ export const POSModule = ({
   );
 
   return (
-    <div className="flex flex-col gap-8 h-auto lg:h-[calc(100vh-12rem)]">
+    <div className="flex flex-col gap-8 h-full max-h-[calc(100vh-22rem)]">
       {/* Sub-navigation */}
-      <div className="flex bg-white/50 p-1 rounded-xl border border-black/5 w-fit">
+      <div className="flex bg-white/50 p-1.5 rounded-2xl border border-black/5 w-fit shadow-sm">
         {type === "Restaurant" ? (
           <>
             <button
               onClick={() => setActiveSubTab("orders")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "orders" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+              className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all
+                ${activeSubTab === "orders" ? "bg-black text-white shadow-lg" : "text-black/40 hover:text-black/60"}`}
             >
               Live Orders
             </button>
             <button
               onClick={() => setActiveSubTab("menu")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "menu" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+              className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all
+                ${activeSubTab === "menu" ? "bg-black text-white shadow-lg" : "text-black/40 hover:text-black/60"}`}
             >
               Menu Management
             </button>
@@ -378,23 +378,23 @@ export const POSModule = ({
           <>
             <button
               onClick={() => setActiveSubTab("menu")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "menu" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+              className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all
+                ${activeSubTab === "menu" ? "bg-black text-white shadow-lg" : "text-black/40 hover:text-black/60"}`}
             >
               Bar POS
             </button>
             <button
               onClick={() => setActiveSubTab("orders")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                ${activeSubTab === "orders" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+              className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all
+                ${activeSubTab === "orders" ? "bg-black text-white shadow-lg" : "text-black/40 hover:text-black/60"}`}
             >
               Orders
             </button>
             {canManageInventory && (
               <button
                 onClick={() => setActiveSubTab("inventory")}
-                className={`px-4 py-2 rounded-lg text-xs font-mono uppercase tracking-widest transition-all
-                  ${activeSubTab === "inventory" ? "bg-black text-white shadow-md" : "text-black/40 hover:text-black/60"}`}
+                className={`px-6 py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all
+                  ${activeSubTab === "inventory" ? "bg-black text-white shadow-lg" : "text-black/40 hover:text-black/60"}`}
               >
                 Inventory
               </button>
@@ -403,8 +403,8 @@ export const POSModule = ({
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8 flex-1 overflow-hidden">
-        <div className="flex-1 space-y-6 overflow-y-auto pr-0 lg:pr-4">
+      <div className="flex flex-col lg:flex-row gap-10 flex-1 min-h-0">
+        <div className="flex-1 space-y-8 overflow-y-auto custom-scrollbar pr-2 min-h-0">
           {activeSubTab === "inventory" ? (
             <InventoryModule
               menu={menu}
@@ -809,11 +809,11 @@ export const POSModule = ({
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {cart.map((item, i) => (
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 min-h-0">
+              {cart.map((item) => (
                 <div
-                  key={i}
-                  className="flex justify-between items-center text-sm"
+                  key={item.item.id}
+                  className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-black/5"
                 >
                   <div className="flex flex-col">
                     <span className="font-medium text-[#141414]">

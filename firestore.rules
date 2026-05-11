@@ -9,27 +9,36 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Use getAfter or get to safely check user data
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      // Use get() with a check for existence to prevent rule crashes
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {"role": "Customer"};
     }
 
     function isAdmin() {
-      return isAuthenticated() && (getUserData().role == 'Admin' || getUserData().role == 'System Developer');
+      let data = getUserData();
+      return isAuthenticated() && (data.role == 'Admin' || data.role == 'System Developer');
     }
 
     function isStaff() {
-      return isAuthenticated() && (getUserData().role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry man', 'System Developer']);
+      let data = getUserData();
+      return isAuthenticated() && (data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry man', 'System Developer']);
     }
 
     // --- COLLECTION RULES ---
 
-    // Users: Can read their own or if staff.
+    // Users
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
+    }
+
+    // Devices (Push Notifications)
+    match /devices/{deviceId} {
+      allow read, write: if isAuthenticated();
     }
 
     // Public/Auth Readable Collections
@@ -43,7 +52,7 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // Orders Collection
+    // Orders
     match /orders/{orderId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
@@ -51,7 +60,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Laundry Orders & Services
+    // Laundry
     match /laundry_orders/{orderId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
@@ -99,20 +108,22 @@ service cloud.firestore {
       allow delete: if isStaff();
     }
 
-    // Logs & Preferences
+    // System Logs
     match /system_logs/{logId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 
+    // Global Preferences
     match /global_preferences/{prefId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
+    // Expenditures
     match /expenditures/{expId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isStaff(); // Allow staff to see summary if needed, but writes are handled by logic
     }
   }
 }

@@ -39,7 +39,6 @@ import {
   OperationType,
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
-import { createWorkflowNotification } from "../../notifications/services/notificationWorkflow";
 import { logger } from "../../../shared/utils/logger";
 
 import { BookingModal } from "./BookingModal";
@@ -103,35 +102,20 @@ export const RoomsModule = ({
     },
   );
 
-  const [filterCheckIn, setFilterCheckIn] = useState("");
-  const [filterCheckOut, setFilterCheckOut] = useState("");
   const [selectedBookingRoom, setSelectedBookingRoom] = useState<Room | null>(
     null,
   );
   const [bookingSearch, setBookingSearch] = useState("");
 
-  const filteredRooms = useMemo(() => {
-    if (!filterCheckIn || !filterCheckOut) return rooms;
-
-    const start = parseISO(filterCheckIn);
-    const end = parseISO(filterCheckOut);
-
-    return rooms.filter((room) => {
-      // Check for any conflicting bookings
-      const hasConflict = bookings.some((booking) => {
-        if (booking.room_id !== room.id || booking.status === "Cancelled")
-          return false;
-        const bStart = parseISO(booking.check_in.split("T")[0]);
-        const bEnd = parseISO(booking.check_out.split("T")[0]);
-        return (
-          (start < bEnd && end > bStart) || // Overlap
-          booking.status === "Checked In" ||
-          booking.status === "Active"
-        );
-      });
-      return !hasConflict;
-    });
-  }, [rooms, bookings, filterCheckIn, filterCheckOut]);
+  const searchedRooms = useMemo(() => {
+    if (!bookingSearch.trim()) return rooms;
+    const term = bookingSearch.toLowerCase();
+    return rooms.filter(
+      (r) =>
+        r.number.toLowerCase().includes(term) ||
+        r.category.toLowerCase().includes(term),
+    );
+  }, [rooms, bookingSearch]);
 
   const canManage = canManageRooms(userRole as User["role"] | undefined);
 
@@ -378,102 +362,38 @@ export const RoomsModule = ({
       </div>
 
       {activeSubTab === "rooms" ? (
-        <div className="space-y-6">
-          <div className="relative overflow-hidden rounded-3xl border border-black/5 min-h-65 bg-white">
-            <img
-              loading="lazy"
-              src={conferenceShowcase}
-              alt="Conference hall"
-              className="absolute inset-0 h-full w-full object-cover"
+        <div className="space-y-6 flex-1 min-h-0 flex flex-col">
+          <div className="relative mb-4">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20"
+              size={18}
             />
-            <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/45 to-black/10" />
-            <div className="relative flex min-h-65 flex-col justify-end p-6 text-white">
-              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
-                Meetings & Events
-              </p>
-              <h3 className="mt-2 text-3xl font-serif italic">
-                Conference Facilities
-              </h3>
-              <p className="mt-2 max-w-xl text-sm text-white/80">
-                The conference module now uses the on-site hall photography so
-                the booking experience reflects the real venue.
-              </p>
-            </div>
+            <input
+              type="text"
+              placeholder="Search registry by unit or category..."
+              value={bookingSearch}
+              onChange={(e) => setBookingSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-white border border-black/5 rounded-2xl outline-none focus:border-black/10 transition-all shadow-sm text-sm"
+            />
           </div>
-
-          <div className="bg-white p-6 rounded-3xl border border-black/5 shadow-sm flex flex-col md:flex-row items-end gap-4">
-            <div className="flex-1 space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-black/40">
-                Check-In Date
-              </label>
-              <input
-                type="date"
-                value={filterCheckIn}
-                onChange={(e) => setFilterCheckIn(e.target.value)}
-                className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
-              />
-            </div>
-            <div className="flex-1 space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-black/40">
-                Check-Out Date
-              </label>
-              <input
-                type="date"
-                value={filterCheckOut}
-                onChange={(e) => setFilterCheckOut(e.target.value)}
-                className="w-full p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
-              />
-            </div>
-            <button
-              onClick={() => {
-                setFilterCheckIn("");
-                setFilterCheckOut("");
-              }}
-              className="px-6 py-3 bg-black/5 text-black/40 rounded-xl hover:bg-black/10 transition-colors text-xs font-mono uppercase tracking-widest"
-            >
-              Clear
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredRooms.map((room) => (
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5 content-start pb-8">
+            {searchedRooms.map((room) => (
               <motion.div
                 key={room.id}
-                whileHover={{ y: -4 }}
-                className="bg-white p-6 rounded-2xl border border-black/5 shadow-sm hover:shadow-lg transition-all relative group"
+                whileHover={{ y: -6, scale: 1.01 }}
+                className="bg-white p-4 rounded-[1.5rem] border border-black/5 shadow-sm hover:shadow-xl transition-all relative group overflow-hidden flex flex-col gap-3"
               >
-                <div className="aspect-video mb-4 rounded-xl overflow-hidden bg-gray-100 relative group-hover:shadow-inner">
-                  <AnimatePresence mode="wait">
-                    <motion.img
-                      key={
-                        room.imageUrl ||
-                        (room.category === "Single"
-                          ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
-                          : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
-                      }
-                      src={
-                        room.imageUrl ||
-                        (room.category === "Single"
-                          ? LOCAL_ASSETS.rooms.singleGallery[activeImageIndex]
-                          : LOCAL_ASSETS.rooms.doubleGallery[activeImageIndex])
-                      }
-                      alt={room.category}
-                      className="w-full h-full object-cover"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.4 }}
-                    />
-                  </AnimatePresence>
-                  <div className="absolute top-3 right-3">
+                <div className="aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 relative shadow-inner shrink-0">
+                  ...
+                  <div className="absolute top-2 right-2">
                     <span
-                      className={`px-2 py-1 rounded-lg text-[8px] font-mono uppercase tracking-widest border
+                      className={`px-2 py-0.5 rounded-md text-[7px] font-mono font-bold uppercase tracking-wider border backdrop-blur-md shadow-sm
                       ${
                         room.status === "Available"
-                          ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                          ? "bg-emerald-500/90 text-white border-emerald-400"
                           : room.status === "Occupied"
-                            ? "bg-red-50 text-red-600 border-red-100"
-                            : "bg-orange-50 text-orange-600 border-orange-100"
+                            ? "bg-red-500/90 text-white border-red-400"
+                            : "bg-orange-500/90 text-white border-orange-400"
                       }`}
                     >
                       {room.status}
@@ -481,41 +401,60 @@ export const RoomsModule = ({
                   </div>
                 </div>
 
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-[10px] font-mono text-black/30 uppercase tracking-widest mb-1">
-                      Room {room.number}
-                    </p>
-                    <h3 className="text-lg font-serif italic text-[#141414]">
+                <div className="flex-1 flex flex-col justify-between gap-3 px-0.5">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[8px] font-mono text-black/30 uppercase tracking-widest font-black">
+                        Unit {room.number}
+                      </p>
+                      <span className="w-1 h-1 rounded-full bg-black/5"></span>
+                      <p className="text-[8px] font-mono text-black/20 uppercase tracking-tighter font-bold">
+                        {room.category}
+                      </p>
+                    </div>
+                    <h3 className="text-lg font-serif italic text-[#141414] tracking-tight leading-tight">
                       {room.category} Suite
                     </h3>
                   </div>
-                  <p className="text-sm font-medium">N$ {room.price}</p>
-                </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedBookingRoom(room)}
-                    className="flex-1 py-2.5 bg-black text-white rounded-xl text-[10px] font-mono uppercase tracking-widest hover:bg-black/90 transition-all"
-                  >
-                    Check In
-                  </button>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => startEdit(room)}
-                        className="p-2.5 bg-gray-50 border border-black/5 rounded-xl hover:bg-gray-100 transition-colors text-black/40"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => deleteRoom(room.id)}
-                        className="p-2.5 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors text-red-400"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex justify-between items-end border-t border-black/5 pt-2.5">
+                      <div>
+                        <p className="text-[7px] font-mono text-black/20 uppercase tracking-widest font-black">
+                          Nightly
+                        </p>
+                        <p className="text-lg font-serif italic font-black text-black leading-none">
+                          N$ {room.price}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-1">
+                        {canManage && (
+                          <button
+                            onClick={() => startEdit(room)}
+                            className="p-2 bg-gray-50 border border-black/5 rounded-lg hover:bg-black hover:text-white transition-all text-black/30 btn-interactive"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        )}
+                        {canManage && (
+                          <button
+                            onClick={() => deleteRoom(room.id)}
+                            className="p-2 bg-red-50 border border-red-100 rounded-lg hover:bg-red-500 hover:text-white transition-all text-red-400 btn-interactive"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
+
+                    <button
+                      onClick={() => setSelectedBookingRoom(room)}
+                      className="w-full py-2.5 bg-black text-white rounded-xl text-[9px] font-mono font-bold uppercase tracking-widest hover:bg-black/85 transition-all shadow-md active:scale-95 btn-interactive"
+                    >
+                      Check In
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -936,6 +875,47 @@ export const RoomsModule = ({
                         </div>
                       ))}
                     </div>
+
+                    {/* Link from Portfolio */}
+                    {portfolioServices.filter(
+                      (p) =>
+                        !newRoom.additionalServices.some(
+                          (s) => s.name === p.name,
+                        ),
+                    ).length > 0 && (
+                      <div className="mt-6 pt-6 border-t border-black/5">
+                        <p className="text-[8px] font-mono uppercase text-black/20 mb-3 tracking-widest">
+                          Available from Portfolio
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {portfolioServices
+                            .filter(
+                              (p) =>
+                                !newRoom.additionalServices.some(
+                                  (s) => s.name === p.name,
+                                ),
+                            )
+                            .map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() =>
+                                  setNewRoom({
+                                    ...newRoom,
+                                    additionalServices: [
+                                      ...newRoom.additionalServices,
+                                      { name: p.name, price: p.price },
+                                    ],
+                                  })
+                                }
+                                className="px-3 py-1.5 bg-black/5 hover:bg-black hover:text-white rounded-lg text-[9px] font-mono uppercase transition-all flex items-center gap-2"
+                              >
+                                <Plus size={10} /> {p.name}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="pt-2">
                     <button

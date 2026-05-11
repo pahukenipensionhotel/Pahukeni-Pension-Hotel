@@ -45,15 +45,6 @@ export const notifyOnCreate = onDocumentCreated("notifications/{notificationId}"
           if (t) tokens.push(String(t));
         });
       }
-    } else {
-      // Broadcast to all devices (use with caution in production)
-      const devicesSnap = await db.collection("devices").limit(500).get();
-      devicesSnap.forEach((d) => {
-        const t = d.data().token;
-        if (t) tokens.push(String(t));
-      });
-    }
-
     // Deduplicate and filter tokens
     tokens = Array.from(new Set(tokens)).filter((t) => t && t.length > 0);
 

@@ -4,9 +4,13 @@ import {
   sanitizeMultilineText,
   sanitizeText,
 } from "../../../shared/validation/inputs";
+import { STAFF_ROLES } from "../../../shared/security/roles";
 
 type NotificationPayload = Omit<Notification, "id" | "read" | "created_at">;
 
+/**
+ * Validates and normalizes a notification before creation.
+ */
 function normalizeNotification(
   payload: NotificationPayload,
 ): NotificationPayload {
@@ -17,17 +21,16 @@ function normalizeNotification(
   };
 }
 
+/**
+ * Routes a notification to a specific user.
+ */
 export async function notifyUser(
   payload: NotificationPayload,
   options?: { showToast?: (msg: string, type?: "success" | "error") => void },
 ) {
   const normalized = normalizeNotification(payload);
   if (!normalized.userId) {
-    // If no userId, we can't send a targeted notification, but we might want to log it
-    console.warn(
-      "Notification skipped: No userId provided for targeted notification",
-      normalized,
-    );
+    console.warn("Notification skipped: userId target is required.");
     return;
   }
   try {
@@ -39,6 +42,9 @@ export async function notifyUser(
   }
 }
 
+/**
+ * Routes a notification to all users with a specific staff role.
+ */
 export async function notifyRole(
   payload: NotificationPayload,
   options?: {
@@ -47,26 +53,37 @@ export async function notifyRole(
   },
 ) {
   const normalized = normalizeNotification(payload);
-  if (!normalized.role) {
-    throw new Error("Notification role target is required.");
+  const targetRole = normalized.role as User["role"];
+
+  if (!targetRole || !STAFF_ROLES.includes(targetRole)) {
+    console.warn(
+      `Notification skipped: Invalid or non-staff target role: ${targetRole}`,
+    );
+    return;
   }
 
   try {
+    // 1. Send to target staff role
     await createNotificationRecord(normalized);
 
-    if (options?.mirrorToAdmin !== false && normalized.role !== "Admin") {
+    // 2. Automatically mirror critical staff notifications to Admin for oversight
+    if (options?.mirrorToAdmin !== false && targetRole !== "Admin") {
       await createNotificationRecord({
         ...normalized,
         role: "Admin",
       });
     }
-    options?.showToast?.(`Notification sent to ${normalized.role}`, "success");
+
+    options?.showToast?.(`Notification routed to ${targetRole}`, "success");
   } catch (err) {
-    options?.showToast?.(`Failed to notify ${normalized.role}`, "error");
+    options?.showToast?.(`Routing failure for ${targetRole}`, "error");
     throw err;
   }
 }
 
+/**
+ * Top-level entry point for workflow notifications.
+ */
 export async function createWorkflowNotification(
   payload: NotificationPayload,
   options?: {
@@ -80,7 +97,7 @@ export async function createWorkflowNotification(
   if (payload.role) {
     return notifyRole(payload, options);
   }
-  throw new Error("Notification target is required.");
+  throw new Error("Invalid notification target: must specify userId or role.");
 }
 
 export function buildOrderStatusMessage(
