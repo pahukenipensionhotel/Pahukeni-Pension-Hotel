@@ -381,9 +381,9 @@ export const RoomsModule = ({
               <motion.div
                 key={room.id}
                 whileHover={{ y: -6, scale: 1.01 }}
-                className="bg-white p-4 rounded-[1.5rem] border border-black/5 shadow-sm hover:shadow-xl transition-all relative group overflow-hidden flex flex-col gap-3"
+                className="bg-white p-4 rounded-3xl border border-black/5 shadow-sm hover:shadow-xl transition-all relative group overflow-hidden flex flex-col gap-3"
               >
-                <div className="aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 relative shadow-inner shrink-0">
+                <div className="aspect-16/10 rounded-xl overflow-hidden bg-gray-100 relative shadow-inner shrink-0">
                   ...
                   <div className="absolute top-2 right-2">
                     <span
@@ -480,7 +480,7 @@ export const RoomsModule = ({
 
           <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[900px]">
+              <table className="w-full text-left border-collapse min-w-225">
                 <thead>
                   <tr className="bg-[#F9F9F8] border-b border-black/5">
                     <th className="p-6 text-[10px] font-mono uppercase text-black/40 tracking-widest">

@@ -399,9 +399,6 @@ export const CustomerPortal = ({
               exit={{ opacity: 0, scale: 0.9 }}
               className="glass-effect p-5 rounded-3xl shadow-2xl flex items-center gap-4 pointer-events-auto border-black/5"
             >
-              <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center shrink-0 shadow-lg">
-                <Bell size={18} className="text-white" />
-              </div>
               <p className="text-xs font-semibold text-[#141414] leading-snug">
                 {n.message}
               </p>
@@ -452,7 +449,7 @@ export const CustomerPortal = ({
                 onClick={() =>
                   setShowHotelNotifications(!showHotelNotifications)
                 }
-                className="p-2.5 hover:bg-gray-100 rounded-xl transition-colors relative active:scale-95"
+                className="p-3 hover:bg-gray-100 rounded-xl transition-colors relative active:scale-95"
               >
                 <Bell size={22} className="text-black/60" />
                 {globalHotelNotifications.filter((n) => !n.read).length > 0 && (
@@ -462,21 +459,23 @@ export const CustomerPortal = ({
 
               <AnimatePresence>
                 {showHotelNotifications && (
-                  <div className="absolute right-0 mt-4 w-96 z-50">
-                    <NotificationCenterPanel
-                      notifications={globalHotelNotifications}
-                      onClose={() => setShowHotelNotifications(false)}
-                      onMarkAsRead={markHotelNotificationAsRead}
-                      onNavigate={(type) => {
-                        if (type === "order") setActiveTab("orders");
-                        if (type === "laundry") setActiveTab("laundry");
-                        if (type === "conference") setActiveTab("conference");
-                      }}
-                    />
+                  <div className="absolute right-0 top-full mt-4 w-[90vw] md:w-96 z-[100] p-2">
+                    <div className="glass-effect rounded-3xl shadow-2xl border border-black/5 overflow-hidden">
+                      <NotificationCenterPanel
+                        notifications={globalHotelNotifications}
+                        onClose={() => setShowHotelNotifications(false)}
+                        onMarkAsRead={markHotelNotificationAsRead}
+                        onNavigate={(type) => {
+                          if (type === "order") setActiveTab("orders");
+                          if (type === "laundry") setActiveTab("laundry");
+                          if (type === "conference") setActiveTab("conference");
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </AnimatePresence>
-            </div>
+            </div>{" "}
             <div className="hidden sm:flex flex-col items-end mr-2">
               <span className="text-sm font-bold text-[#141414]">
                 {user.name}
@@ -574,7 +573,7 @@ export const CustomerPortal = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-5 p-5 rounded-[1.5rem] transition-all ${
+                className={`w-full flex items-center gap-5 p-5 rounded-3xl transition-all ${
                   activeTab === item.id
                     ? "bg-black text-white shadow-2xl shadow-black/20 scale-[1.02]"
                     : "bg-white text-black/50 hover:text-black hover:bg-white border border-black/5 shadow-sm hover:shadow-md"
@@ -860,7 +859,7 @@ export const CustomerPortal = ({
                       key={room.id}
                       className="bg-white rounded-3xl border border-black/5 overflow-hidden shadow-sm group hover:shadow-xl transition-all"
                     >
-                      <div className="aspect-[16/10] overflow-hidden relative">
+                      <div className="aspect-16/10 overflow-hidden relative">
                         <img
                           loading="lazy"
                           src={getRoomImage(room)}

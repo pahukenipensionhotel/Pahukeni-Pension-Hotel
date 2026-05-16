@@ -17,7 +17,11 @@ import {
   ScrollText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { signOut } from "firebase/auth";
+import {
+  setPersistence,
+  browserSessionPersistence,
+  signOut,
+} from "firebase/auth";
 import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { IMAGE_CATALOG } from "./shared/assets/imageCatalog";
@@ -56,13 +60,19 @@ export default function App() {
     { id: string; message: string; type: "success" | "error" | "info" }[]
   >([]);
 
-  // --- Session Inactivity Timer ---
+  // Force session persistence
+  useEffect(() => {
+    setPersistence(auth, browserSessionPersistence).catch((err) =>
+      console.error("Failed to set persistence", err),
+    );
+  }, []);
+
+  // --- Session Inactivity Timer (15 mins) ---
   useEffect(() => {
     let inactivityTimeout: NodeJS.Timeout;
 
     const resetTimer = () => {
       clearTimeout(inactivityTimeout);
-      // Force logout after 30 minutes of inactivity
       inactivityTimeout = setTimeout(
         () => {
           if (auth.currentUser) {
@@ -72,7 +82,7 @@ export default function App() {
             );
           }
         },
-        30 * 60 * 1000,
+        15 * 60 * 1000,
       );
     };
 
@@ -86,7 +96,6 @@ export default function App() {
       events.forEach((e) => window.removeEventListener(e, resetTimer));
     };
   }, []);
-  // --------------------------------
 
   const addToast = (
     message: string,
@@ -313,12 +322,14 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-            >
-              {isSidebarOpen ? <X size={28} /> : <Menu size={28} />}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-3 hover:bg-white/10 rounded-xl transition-colors"
+              >
+                {isSidebarOpen ? <X size={28} /> : <Menu size={28} />}
+              </button>
+            </div>
           </div>
 
           <AnimatePresence>
@@ -436,12 +447,12 @@ export default function App() {
 
           <main className="flex-1 p-6 md:p-12 lg:p-16 overflow-y-auto custom-scrollbar relative bg-[#E4E3E0]">
             <div className="max-w-8xl mx-auto w-full">
-              <header className="flex flex-col md:flex-row md:items-center justify-between mb-12 md:mb-16 gap-6">
-                <div>
-                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic text-[#141414] capitalize tracking-tight">
+              <header className="flex flex-row items-center justify-between mb-12 md:mb-16 gap-6 flex-wrap md:flex-nowrap">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-3xl md:text-5xl lg:text-6xl font-serif italic text-[#141414] capitalize tracking-tight truncate">
                     {activeTab}
                   </h2>
-                  <p className="text-[11px] md:text-xs font-mono text-black/30 uppercase tracking-[0.4em] mt-3 ml-1">
+                  <p className="text-[10px] md:text-xs font-mono text-black/30 uppercase tracking-[0.2em] mt-3 ml-1">
                     {new Date().toLocaleDateString("en-US", {
                       weekday: "long",
                       year: "numeric",
@@ -450,37 +461,40 @@ export default function App() {
                     })}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6 shrink-0">
+                  {/* Global Notification Bell */}
                   <div className="relative">
                     <button
                       onClick={() =>
                         setShowHotelNotifications(!showHotelNotifications)
                       }
-                      className="p-2 hover:bg-black/5 rounded-xl transition-colors relative"
+                      className="p-3 hover:bg-black/5 rounded-xl transition-colors relative active:scale-95"
                     >
-                      <Bell size={20} className="text-[#141414]" />
+                      <Bell size={22} className="text-[#141414]" />
                       {notifications.filter((n) => !n.read).length > 0 && (
-                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#E4E3E0]"></span>
+                        <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#E4E3E0]"></span>
                       )}
                     </button>
                     <AnimatePresence>
                       {showHotelNotifications && (
-                        <div className="absolute right-0 mt-2 w-80 z-50">
-                          <NotificationCenterPanel
-                            notifications={notifications}
-                            onClose={() => setShowHotelNotifications(false)}
-                            onMarkAsRead={markHotelNotificationAsRead}
-                            onNavigate={(type, title) => {
-                              if (type === "order") {
-                                if (title?.toLowerCase().includes("bar"))
-                                  setActiveTab("bar");
-                                else setActiveTab("restaurant");
-                              }
-                              if (type === "laundry") setActiveTab("laundry");
-                              if (type === "conference")
-                                setActiveTab("conference");
-                            }}
-                          />
+                        <div className="absolute right-0 top-full mt-4 w-96 z-[100] p-2">
+                          <div className="glass-effect rounded-3xl shadow-2xl border border-black/5 overflow-hidden">
+                            <NotificationCenterPanel
+                              notifications={notifications}
+                              onClose={() => setShowHotelNotifications(false)}
+                              onMarkAsRead={markHotelNotificationAsRead}
+                              onNavigate={(type, title) => {
+                                if (type === "order") {
+                                  if (title?.toLowerCase().includes("bar"))
+                                    setActiveTab("bar");
+                                  else setActiveTab("restaurant");
+                                }
+                                if (type === "laundry") setActiveTab("laundry");
+                                if (type === "conference")
+                                  setActiveTab("conference");
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                     </AnimatePresence>
@@ -571,27 +585,6 @@ export default function App() {
                     />
                   )}
                   {activeTab === "system_logs" && <SystemLogs />}
-                  {![
-                    "dashboard",
-                    "rooms",
-                    "staff",
-                    "restaurant",
-                    "bar",
-                    "laundry",
-                    "conference",
-                    "reports",
-                    "system_logs",
-                  ].includes(activeTab) && (
-                    <div className="bg-white p-12 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center text-center">
-                      <AlertCircle size={48} className="text-black/10 mb-4" />
-                      <h3 className="text-xl font-serif italic mb-2">
-                        {activeTab} Module
-                      </h3>
-                      <p className="text-sm text-black/40 max-w-md">
-                        This module is currently being populated with live data.
-                      </p>
-                    </div>
-                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -606,7 +599,7 @@ export default function App() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 100, scale: 0.9 }}
-              className={`pointer-events-auto p-5 rounded-3xl shadow-2xl border backdrop-blur-md flex items-center gap-4 ${
+              className={`pointer-events-auto p-5 rounded-[1.5rem] shadow-2xl border backdrop-blur-md flex items-center gap-4 ${
                 toast.type === "success"
                   ? "bg-emerald-500/90 border-emerald-400/50 text-white"
                   : toast.type === "error"

@@ -18,6 +18,7 @@ import {
 } from "../../../shared/validation/inputs";
 import { logger } from "../../../shared/utils/logger";
 import { auth } from "../../../services/firebase/client";
+import { useFormSubmission } from "../../../shared/hooks/useFormSubmission";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -51,8 +52,7 @@ export const StaffModule = ({
   const hotelStaff = users.filter((u) => u.role !== "Customer");
   const guests = users.filter((u) => u.role === "Customer");
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddMember = async (_e: React.FormEvent) => {
     let secondaryApp;
     try {
       try {
@@ -116,6 +116,9 @@ export const StaffModule = ({
       }
     }
   };
+
+  const { handleSubmit: submitMember, isSubmitting } =
+    useFormSubmission(handleAddMember);
 
   const updateRole = async (userId: string, newRole: User["role"]) => {
     try {
@@ -367,7 +370,7 @@ export const StaffModule = ({
                   <X size={24} />
                 </button>
               </div>
-              <form onSubmit={handleAddMember} className="space-y-6">
+              <form onSubmit={submitMember} className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest ml-1">
@@ -456,9 +459,10 @@ export const StaffModule = ({
                 )}
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full py-5 bg-black text-white rounded-2xl font-bold uppercase tracking-[0.3em] text-[11px] mt-4 hover:bg-black/90 transition-all shadow-2xl shadow-black/20 active:scale-95 btn-interactive"
                 >
-                  Commit Provisioning
+                  {isSubmitting ? "Commiting..." : "Commit Provisioning"}
                 </button>
               </form>
             </motion.div>
