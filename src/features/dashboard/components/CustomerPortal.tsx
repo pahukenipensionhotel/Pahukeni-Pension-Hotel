@@ -188,7 +188,7 @@ export const CustomerPortal = ({
   const handleRoomCheckIn = async (
     room: Room,
     options: {
-      includeBreakfast: boolean;
+      breakfastOption: "none" | "single" | "sharing";
       selectedAddons: string[];
       checkInDate: string;
       checkOutDate: string;
@@ -209,11 +209,15 @@ export const CustomerPortal = ({
         Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
       );
 
+      let breakfastTotal = 0;
+      if (options.breakfastOption === "single") {
+        breakfastTotal = 100 * nights;
+      } else if (options.breakfastOption === "sharing") {
+        breakfastTotal = 300 * nights;
+      }
+
       const finalPrice =
-        room.price * nights +
-        (options.includeBreakfast ? (room.breakfastPrice || 0) * nights : 0) +
-        addonFromRoom +
-        addonFromGlobal;
+        room.price * nights + breakfastTotal + addonFromRoom + addonFromGlobal;
 
       await addDoc(collection(db, "room_bookings"), {
         room_id: room.id,
@@ -222,7 +226,8 @@ export const CustomerPortal = ({
         guest_name: user.name,
         guest_email: user.email,
         total_price: finalPrice,
-        breakfast_included: options.includeBreakfast,
+        breakfast_included: options.breakfastOption !== "none",
+        breakfast_type: options.breakfastOption,
         additional_services: options.selectedAddons,
         status: "Pending",
         check_in: new Date(options.checkInDate).toISOString(),
@@ -248,7 +253,7 @@ export const CustomerPortal = ({
         await createNotification({
           role: "Receptionist",
           title: "New Check-In Request",
-          message: `${user.name} checked into Room ${room.number} with ${options.includeBreakfast ? "breakfast" : "no breakfast"}${options.selectedAddons.length > 0 ? " and extra services" : ""}`,
+          message: `${user.name} checked into Room ${room.number} with ${options.breakfastOption === "none" ? "no breakfast" : options.breakfastOption + " breakfast"}${options.selectedAddons.length > 0 ? " and extra services" : ""}`,
           type: "system",
           targetTab: "rooms",
         });

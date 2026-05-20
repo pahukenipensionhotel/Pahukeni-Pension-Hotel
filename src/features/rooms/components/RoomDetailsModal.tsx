@@ -22,7 +22,7 @@ interface RoomDetailsModalProps {
   onCheckIn: (
     room: Room,
     options: {
-      includeBreakfast: boolean;
+      breakfastOption: "none" | "single" | "sharing";
       selectedAddons: string[];
       checkInDate: string;
       checkOutDate: string;
@@ -40,7 +40,9 @@ export const RoomDetailsModal = ({
   globalPreferences = [],
   getRoomImage,
 }: RoomDetailsModalProps) => {
-  const [includeBreakfast, setIncludeBreakfast] = useState(false);
+  const [breakfastOption, setBreakfastOption] = useState<
+    "none" | "single" | "sharing"
+  >("none");
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
 
   const today = format(new Date(), "yyyy-MM-dd");
@@ -58,9 +60,13 @@ export const RoomDetailsModal = ({
 
   const totalPrice = useMemo(() => {
     const basePrice = selectedRoom.price * nights;
-    const breakfastPrice = includeBreakfast
-      ? (selectedRoom.breakfastPrice || 0) * nights
-      : 0;
+
+    let breakfastTotal = 0;
+    if (breakfastOption === "single") {
+      breakfastTotal = 100 * nights;
+    } else if (breakfastOption === "sharing") {
+      breakfastTotal = 200 * nights;
+    }
 
     const addonsFromRoom = (selectedRoom.additionalServices || [])
       .filter((s) => selectedAddons.includes(s.name))
@@ -70,10 +76,10 @@ export const RoomDetailsModal = ({
       .filter((s) => selectedAddons.includes(s.name))
       .reduce((sum, s) => sum + s.price, 0);
 
-    return basePrice + breakfastPrice + addonsFromRoom + addonsFromGlobal;
+    return basePrice + breakfastTotal + addonsFromRoom + addonsFromGlobal;
   }, [
     selectedRoom,
-    includeBreakfast,
+    breakfastOption,
     selectedAddons,
     globalPreferences,
     nights,
@@ -223,36 +229,39 @@ export const RoomDetailsModal = ({
             <div className="pt-6 border-t border-black/5 mt-auto space-y-6">
               <div className="space-y-4 bg-gray-50 p-4 rounded-2xl">
                 <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40">
-                  Optional Services & Portfolio
+                  Breakfast Options
                 </h4>
 
-                {/* Breakfast Option */}
-                {selectedRoom.breakfastPrice !== undefined &&
-                  selectedRoom.breakfastPrice > 0 && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="breakfastOpt"
-                          checked={includeBreakfast}
-                          onChange={(e) =>
-                            setIncludeBreakfast(e.target.checked)
-                          }
-                          className="rounded border-black/10"
-                        />
-                        <label
-                          htmlFor="breakfastOpt"
-                          className="text-xs font-medium"
-                        >
-                          Add Daily Breakfast (N$ {selectedRoom.breakfastPrice}{" "}
-                          / day)
-                        </label>
-                      </div>
-                      <span className="text-xs font-serif italic text-black/60">
-                        + N$ {selectedRoom.breakfastPrice * nights}
-                      </span>
-                    </div>
-                  )}
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setBreakfastOption("none")}
+                    className={`flex justify-between items-center p-3 rounded-xl border transition-all text-xs
+                      ${breakfastOption === "none" ? "bg-black text-white border-black" : "bg-white text-black/60 border-black/5 hover:border-black/20"}`}
+                  >
+                    <span>No Breakfast</span>
+                    <span>N$ 0</span>
+                  </button>
+                  <button
+                    onClick={() => setBreakfastOption("single")}
+                    className={`flex justify-between items-center p-3 rounded-xl border transition-all text-xs
+                      ${breakfastOption === "single" ? "bg-black text-white border-black" : "bg-white text-black/60 border-black/5 hover:border-black/20"}`}
+                  >
+                    <span>Breakfast (Single Person)</span>
+                    <span>N$ 100 / day</span>
+                  </button>
+                  <button
+                    onClick={() => setBreakfastOption("sharing")}
+                    className={`flex justify-between items-center p-3 rounded-xl border transition-all text-xs
+                      ${breakfastOption === "sharing" ? "bg-black text-white border-black" : "bg-white text-black/60 border-black/5 hover:border-black/20"}`}
+                  >
+                    <span>Breakfast (Two People Sharing)</span>
+                    <span>N$ 200 / day</span>
+                  </button>
+                </div>
+
+                <h4 className="text-[10px] font-mono uppercase tracking-widest text-black/40 mt-4">
+                  Optional Services & Portfolio
+                </h4>
 
                 {/* Room Specific Addons */}
                 {selectedRoom.additionalServices?.map((s, i) => (
@@ -358,7 +367,7 @@ export const RoomDetailsModal = ({
                 disabled={!isDateRangeAvailable}
                 onClick={() =>
                   onCheckIn(selectedRoom, {
-                    includeBreakfast,
+                    breakfastOption,
                     selectedAddons,
                     checkInDate,
                     checkOutDate,

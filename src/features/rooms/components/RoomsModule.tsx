@@ -96,7 +96,7 @@ export const RoomsModule = ({
       description: "",
       amenities: [],
       breakfastIncluded: true,
-      breakfastPrice: 150,
+      breakfastPrice: 100,
       additionalServices: [],
       prefix: "SR",
     },
@@ -175,7 +175,7 @@ export const RoomsModule = ({
       price: room.price,
       status: room.status,
       breakfastIncluded: room.breakfastIncluded ?? true,
-      breakfastPrice: room.breakfastPrice ?? 150,
+      breakfastPrice: room.breakfastPrice ?? 100,
       additionalServices: room.additionalServices ?? [],
       description: room.description ?? "",
       amenities: room.amenities ?? [],
@@ -750,12 +750,21 @@ export const RoomsModule = ({
                       Suite Category
                     </label>
                     <div className="grid grid-cols-3 gap-3">
-                      {["Single", "Double", "VIP"].map((cat) => (
+                      {[
+                        { cat: "Single", price: 450, prefix: "SR" },
+                        { cat: "Double", price: 550, prefix: "DR" },
+                        { cat: "VIP", price: 750, prefix: "VR" },
+                      ].map(({ cat, price, prefix }) => (
                         <button
                           key={cat}
                           type="button"
                           onClick={() =>
-                            setNewRoom({ ...newRoom, category: cat as any })
+                            setNewRoom({
+                              ...newRoom,
+                              category: cat as any,
+                              price: price,
+                              prefix: prefix,
+                            })
                           }
                           className={`py-3 rounded-xl border text-[10px] font-mono uppercase tracking-widest transition-all
                             ${newRoom.category === cat ? "bg-black text-white border-black" : "bg-gray-50 text-black/40 border-black/5"}`}

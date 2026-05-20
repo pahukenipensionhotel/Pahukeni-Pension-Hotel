@@ -2,7 +2,13 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Calendar, User, CreditCard, Phone, Globe } from "lucide-react";
 import { format, addDays, differenceInDays, parseISO } from "date-fns";
-import { collection, addDoc, doc, updateDoc, writeBatch } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import { Room, User as HotelUser } from "../../../shared/types/hotel";
 import { logger } from "../../../shared/utils/logger";
@@ -13,7 +19,11 @@ interface BookingModalProps {
   onSuccess: (message: string) => void;
 }
 
-export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) => {
+export const BookingModal = ({
+  room,
+  onClose,
+  onSuccess,
+}: BookingModalProps) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     guestName: "",
@@ -23,12 +33,22 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
     paymentMethod: "Cash" as "Cash" | "Card",
     checkIn: format(new Date(), "yyyy-MM-dd"),
     checkOut: format(addDays(new Date(), 1), "yyyy-MM-dd"),
-    includeBreakfast: true,
+    breakfastOption: "single" as "none" | "single" | "sharing",
   });
 
-  const nights = Math.max(1, differenceInDays(parseISO(formData.checkOut), parseISO(formData.checkIn)));
+  const nights = Math.max(
+    1,
+    differenceInDays(parseISO(formData.checkOut), parseISO(formData.checkIn)),
+  );
   const roomTotal = room.price * nights;
-  const breakfastTotal = formData.includeBreakfast ? (room.breakfastPrice || 0) * nights : 0;
+
+  let breakfastTotal = 0;
+  if (formData.breakfastOption === "single") {
+    breakfastTotal = 100 * nights;
+  } else if (formData.breakfastOption === "sharing") {
+    breakfastTotal = 200 * nights;
+  }
+
   const finalPrice = roomTotal + breakfastTotal;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,7 +69,8 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
         source: formData.source,
         payment_method: formData.paymentMethod,
         total_price: finalPrice,
-        breakfast_included: formData.includeBreakfast,
+        breakfast_included: formData.breakfastOption !== "none",
+        breakfast_type: formData.breakfastOption,
         additional_services: [],
         status: "Checked In",
         check_in: new Date(formData.checkIn).toISOString(),
@@ -84,7 +105,7 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
         `Staff created ${formData.source} booking for ${formData.guestName} in Room ${room.number}`,
         undefined,
         "Staff User",
-        { bookingId: bookingRef.id, roomNumber: room.number }
+        { bookingId: bookingRef.id, roomNumber: room.number },
       );
 
       onSuccess(`Check-in successful for Room ${room.number}`);
@@ -107,12 +128,17 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
       >
         <div className="p-8 border-b border-black/5 flex justify-between items-center bg-gray-50">
           <div>
-            <h3 className="text-2xl font-serif italic text-[#141414]">New Check-In</h3>
+            <h3 className="text-2xl font-serif italic text-[#141414]">
+              New Check-In
+            </h3>
             <p className="text-[10px] font-mono text-black/40 uppercase tracking-widest mt-1">
               Room {room.number} • {room.category} Registry
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-xl transition-colors">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-black/5 rounded-xl transition-colors"
+          >
             <X size={24} className="text-black/40" />
           </button>
         </div>
@@ -126,35 +152,53 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
                 </label>
                 <div className="space-y-4">
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20" size={16} />
+                    <User
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20"
+                      size={16}
+                    />
                     <input
                       required
                       type="text"
                       placeholder="Guest Full Name"
                       value={formData.guestName}
-                      onChange={(e) => setFormData({ ...formData, guestName: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, guestName: e.target.value })
+                      }
                       className="w-full pl-10 p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
                     />
                   </div>
                   <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20" size={16} />
+                    <Globe
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20"
+                      size={16}
+                    />
                     <input
                       required
                       type="email"
                       placeholder="Email Address"
                       value={formData.guestEmail}
-                      onChange={(e) => setFormData({ ...formData, guestEmail: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, guestEmail: e.target.value })
+                      }
                       className="w-full pl-10 p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
                     />
                   </div>
                   <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20" size={16} />
+                    <CreditCard
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20"
+                      size={16}
+                    />
                     <input
                       required
                       type="text"
                       placeholder="ID / Passport Number"
                       value={formData.guestIdNumber}
-                      onChange={(e) => setFormData({ ...formData, guestIdNumber: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guestIdNumber: e.target.value,
+                        })
+                      }
                       className="w-full pl-10 p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
                     />
                   </div>
@@ -170,7 +214,9 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
                     <button
                       key={src}
                       type="button"
-                      onClick={() => setFormData({ ...formData, source: src as any })}
+                      onClick={() =>
+                        setFormData({ ...formData, source: src as any })
+                      }
                       className={`py-2 px-3 rounded-xl border text-[10px] font-mono uppercase transition-all ${
                         formData.source === src
                           ? "bg-black text-white border-black"
@@ -215,23 +261,33 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
                 </label>
                 <div className="space-y-4">
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20" size={16} />
+                    <Calendar
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20"
+                      size={16}
+                    />
                     <input
                       type="date"
                       required
                       value={formData.checkIn}
-                      onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, checkIn: e.target.value })
+                      }
                       className="w-full pl-10 p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
                     />
                   </div>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20" size={16} />
+                    <Calendar
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-black/20"
+                      size={16}
+                    />
                     <input
                       type="date"
                       required
                       min={formData.checkIn}
                       value={formData.checkOut}
-                      onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, checkOut: e.target.value })
+                      }
                       className="w-full pl-10 p-3 bg-gray-50 border border-black/5 rounded-xl outline-none text-sm"
                     />
                   </div>
@@ -239,23 +295,60 @@ export const BookingModal = ({ room, onClose, onSuccess }: BookingModalProps) =>
               </div>
 
               <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs font-medium text-emerald-900">Include Breakfast</span>
-                  <input
-                    type="checkbox"
-                    checked={formData.includeBreakfast}
-                    onChange={(e) => setFormData({ ...formData, includeBreakfast: e.target.checked })}
-                    className="w-4 h-4 rounded text-emerald-600"
-                  />
+                <label className="block text-[10px] font-mono uppercase text-emerald-800/60 mb-3 font-bold tracking-widest">
+                  Breakfast Selection
+                </label>
+                <div className="flex flex-col gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, breakfastOption: "none" })
+                    }
+                    className={`p-2 rounded-lg border text-[10px] font-mono uppercase transition-all ${
+                      formData.breakfastOption === "none"
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white text-emerald-800/40 border-emerald-100 hover:border-emerald-300"
+                    }`}
+                  >
+                    No Breakfast (N$ 0)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, breakfastOption: "single" })
+                    }
+                    className={`p-2 rounded-lg border text-[10px] font-mono uppercase transition-all ${
+                      formData.breakfastOption === "single"
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white text-emerald-800/40 border-emerald-100 hover:border-emerald-300"
+                    }`}
+                  >
+                    Single Breakfast (N$ 100)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, breakfastOption: "sharing" })
+                    }
+                    className={`p-2 rounded-lg border text-[10px] font-mono uppercase transition-all ${
+                      formData.breakfastOption === "sharing"
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white text-emerald-800/40 border-emerald-100 hover:border-emerald-300"
+                    }`}
+                  >
+                    Sharing Breakfast (N$ 200)
+                  </button>
                 </div>
                 <div className="space-y-2 pt-4 border-t border-emerald-200/50">
                   <div className="flex justify-between text-[10px] font-mono uppercase text-emerald-800/60">
-                    <span>{nights} Nights @ N$ {room.price}</span>
+                    <span>
+                      {nights} Nights @ N$ {room.price}
+                    </span>
                     <span>N$ {roomTotal}</span>
                   </div>
-                  {formData.includeBreakfast && (
+                  {formData.breakfastOption !== "none" && (
                     <div className="flex justify-between text-[10px] font-mono uppercase text-emerald-800/60">
-                      <span>Breakfast @ N$ {room.breakfastPrice}</span>
+                      <span>Breakfast ({formData.breakfastOption})</span>
                       <span>N$ {breakfastTotal}</span>
                     </div>
                   )}

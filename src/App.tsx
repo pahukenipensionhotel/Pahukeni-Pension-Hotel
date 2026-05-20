@@ -172,6 +172,7 @@ export default function App() {
             imageUrl: IMAGE_CATALOG.rooms.single,
             description: "Cozy single room.",
             amenities: ["Free Wi-Fi"],
+            breakfastPrice: 100,
           },
           {
             number: "201",
@@ -181,6 +182,7 @@ export default function App() {
             imageUrl: IMAGE_CATALOG.rooms.double,
             description: "Spacious double room.",
             amenities: ["King Size Bed"],
+            breakfastPrice: 150,
           },
         ];
         for (const r of initialRooms) await addDoc(collection(db, "rooms"), r);
