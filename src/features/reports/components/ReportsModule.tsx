@@ -392,6 +392,11 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     inRangeOrders, inRangeLaundry, inRangeExpenditures, range,
   ]);
 
+  const numSources = [bookings, conferenceBookings, expenditures, orders, laundryOrders].filter(
+    (a) => a.length > 0,
+  ).length;
+  const isLive = numSources >= 2;
+
   const dateLabel =
     startDate === endDate
       ? format(parseISO(startDate), "EEEE, dd MMMM yyyy")
@@ -402,9 +407,15 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
       {/* Header & Date Filter */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40">
-            {dateLabel}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-black/40">
+              {dateLabel}
+            </p>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[8px] font-mono uppercase tracking-widest border border-emerald-200">
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-500 animate-pulse" : "bg-gray-300"}`} />
+              Live
+            </span>
+          </div>
           <h2 className="mt-2 text-2xl font-serif italic text-[#141414]">
             Financial Report
           </h2>

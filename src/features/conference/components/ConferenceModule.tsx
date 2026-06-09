@@ -163,37 +163,6 @@ export const ConferenceModule = ({
     }
   };
 
-  const handleEditRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingRoomId) return;
-    try {
-      await updateDoc(doc(db, "conference_rooms", editingRoomId), {
-        name: newRoom.name,
-        capacity: newRoom.capacity,
-        price_per_hour: newRoom.price_per_hour,
-        status: newRoom.status,
-      });
-      await logger.info(
-        "BOOKING",
-        "EDIT_CONFERENCE_ROOM",
-        `Conference room updated: ${newRoom.name}`,
-        auth.currentUser?.uid,
-        auth.currentUser?.displayName || undefined,
-        { roomId: editingRoomId, name: newRoom.name },
-      );
-      setIsAdding(false);
-      setEditingRoomId(null);
-      setNewRoom({
-        name: "",
-        capacity: 0,
-        price_per_hour: 0,
-        status: "Available",
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, "conference_rooms");
-    }
-  };
-
   const startEditRoom = (room: ConferenceRoom) => {
     setEditingRoomId(room.id);
     setNewRoom({
