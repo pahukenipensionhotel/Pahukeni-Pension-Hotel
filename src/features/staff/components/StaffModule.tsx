@@ -8,7 +8,16 @@ import {
   signOut,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import { User, RoomBooking } from "../../../shared/types/hotel";
 import { maskEmail } from "../../../shared/utils/security";
@@ -32,14 +41,22 @@ const firebaseConfig = {
 
 const ROLES = ["Admin", "Receptionist", "Waiter", "Barman", "Laundry man"];
 
-export const StaffModule = ({
-  users,
-  bookings,
-}: {
-  users: User[];
-  bookings: RoomBooking[];
-}) => {
+export const StaffModule = ({ bookings }: { bookings: RoomBooking[] }) => {
+  const [users, setUsers] = React.useState<User[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<"staff" | "guests">("staff");
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, "users"), orderBy("name", "asc")),
+      (snap) => {
+        setUsers(
+          snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as User),
+        );
+      },
+    );
+    return () => unsub();
+  }, []);
+
   const [isAdding, setIsAdding] = useState(false);
   const [newMember, setNewMember] = useState({
     name: "",

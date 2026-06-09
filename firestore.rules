@@ -10,20 +10,27 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      // Use get() with a check for existence to prevent rule crashes
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
-        : {"role": "Customer"};
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(roles) {
+      return isAuthenticated() && (getUserData().role in roles);
     }
 
     function isAdmin() {
-      let data = getUserData();
-      return isAuthenticated() && (data.role == 'Admin' || data.role == 'System Developer');
+      return hasRole(['Admin', 'System Developer']);
     }
 
     function isStaff() {
-      let data = getUserData();
-      return isAuthenticated() && (data.role in ['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry man', 'System Developer']);
+      return hasRole(['Admin', 'Receptionist', 'Waiter', 'Barman', 'Laundry man', 'System Developer']);
+    }
+
+    function isOwner(field) {
+      return isAuthenticated() && (resource.data[field] == request.auth.uid);
+    }
+
+    function willBeOwner(field) {
+      return isAuthenticated() && (request.resource.data[field] == request.auth.uid);
     }
 
     // --- COLLECTION RULES ---
@@ -38,7 +45,8 @@ service cloud.firestore {
 
     // Devices (Push Notifications)
     match /devices/{deviceId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isOwner('owner');
+      allow write: if willBeOwner('owner');
     }
 
     // Public/Auth Readable Collections
@@ -54,16 +62,16 @@ service cloud.firestore {
 
     // Orders
     match /orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isStaff() || isOwner('customer_uid');
+      allow create: if willBeOwner('customer_uid');
       allow update: if isStaff();
       allow delete: if isAdmin();
     }
 
     // Laundry
     match /laundry_orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isStaff() || isOwner('customer_uid');
+      allow create: if willBeOwner('customer_uid');
       allow update: if isStaff();
       allow delete: if isAdmin();
     }
@@ -75,8 +83,8 @@ service cloud.firestore {
 
     // Bookings
     match /room_bookings/{bookingId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isStaff() || isOwner('guest_uid');
+      allow create: if willBeOwner('guest_uid');
       allow update: if isStaff();
       allow delete: if isAdmin();
     }
@@ -95,16 +103,20 @@ service cloud.firestore {
       allow write: if isStaff();
     }
     match /conference_bookings/{bookingId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow read: if isStaff() || isOwner('client_uid');
+      allow create: if willBeOwner('client_uid');
       allow update: if isStaff();
+    }
+
+    match /conference_folios/{folioId} {
+      allow read, write: if isStaff();
     }
 
     // Notifications
     match /notifications/{notifId} {
-      allow read: if isAuthenticated();
+      allow read: if isStaff() || isOwner('userId') || (isAuthenticated() && resource.data.role == getUserData().role);
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow update: if isOwner('userId') || isStaff();
       allow delete: if isStaff();
     }
 
@@ -123,7 +135,7 @@ service cloud.firestore {
 
     // Expenditures
     match /expenditures/{expId} {
-      allow read, write: if isAdmin() || isStaff(); // Allow staff to see summary if needed, but writes are handled by logic
+      allow read, write: if isStaff();
     }
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Calendar, User, CreditCard, Phone, Globe } from "lucide-react";
+import { X, Calendar, User, CreditCard, Phone, Globe, Building2 } from "lucide-react";
 import { format, addDays, differenceInDays, parseISO } from "date-fns";
 import {
   collection,
@@ -10,7 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
-import { Room, User as HotelUser } from "../../../shared/types/hotel";
+import { Room, User as HotelUser, ReceiptDetails } from "../../../shared/types/hotel";
 import { logger } from "../../../shared/utils/logger";
 
 interface BookingModalProps {
@@ -30,10 +30,17 @@ export const BookingModal = ({
     guestEmail: "",
     guestIdNumber: "",
     source: "Walk-in" as any,
-    paymentMethod: "Cash" as "Cash" | "Card",
+    paymentMethod: "Cash" as "Cash" | "Card" | "Receipt",
     checkIn: format(new Date(), "yyyy-MM-dd"),
     checkOut: format(addDays(new Date(), 1), "yyyy-MM-dd"),
     breakfastOption: "single" as "none" | "single" | "sharing",
+  });
+
+  const [receiptDetails, setReceiptDetails] = useState<ReceiptDetails>({
+    company_name: "",
+    contact_person: "",
+    receipt_number: "",
+    amount: 0,
   });
 
   const nights = Math.max(
@@ -53,13 +60,19 @@ export const BookingModal = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (parseISO(formData.checkOut) <= parseISO(formData.checkIn)) {
+      alert("Check-out date must be after check-in date.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const batch = writeBatch(db);
 
       // 1. Create Booking
-      const bookingData = {
+      const bookingData: Record<string, unknown> = {
         room_id: room.id,
         room_number: room.number,
         guest_name: formData.guestName,
@@ -77,6 +90,10 @@ export const BookingModal = ({
         check_out: new Date(formData.checkOut).toISOString(),
         created_at: new Date().toISOString(),
       };
+
+      if (formData.paymentMethod === "Receipt") {
+        bookingData.receipt_details = receiptDetails;
+      }
 
       const bookingRef = doc(collection(db, "room_bookings"));
       batch.set(bookingRef, bookingData);
@@ -233,8 +250,8 @@ export const BookingModal = ({
                 <label className="block text-[10px] font-mono uppercase text-black/40 mb-2 font-bold tracking-widest">
                   Payment Method
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["Cash", "Card"] as const).map((method) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Cash", "Card", "Receipt"] as const).map((method) => (
                     <button
                       key={method}
                       type="button"
@@ -252,6 +269,60 @@ export const BookingModal = ({
                   ))}
                 </div>
               </div>
+
+              {formData.paymentMethod === "Receipt" && (
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Building2 size={16} className="text-blue-700" />
+                    <label className="text-[10px] font-mono uppercase text-blue-800/60 font-bold tracking-widest">
+                      Receipt Details
+                    </label>
+                  </div>
+                  <input
+                    required
+                    type="text"
+                    placeholder="Company / Organization Name"
+                    value={receiptDetails.company_name}
+                    onChange={(e) =>
+                      setReceiptDetails({ ...receiptDetails, company_name: e.target.value })
+                    }
+                    className="w-full p-3 bg-white border border-blue-200 rounded-xl outline-none text-sm"
+                  />
+                  <input
+                    required
+                    type="text"
+                    placeholder="Contact Person Name"
+                    value={receiptDetails.contact_person}
+                    onChange={(e) =>
+                      setReceiptDetails({ ...receiptDetails, contact_person: e.target.value })
+                    }
+                    className="w-full p-3 bg-white border border-blue-200 rounded-xl outline-none text-sm"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      required
+                      type="text"
+                      placeholder="Receipt Number"
+                      value={receiptDetails.receipt_number}
+                      onChange={(e) =>
+                        setReceiptDetails({ ...receiptDetails, receipt_number: e.target.value })
+                      }
+                      className="w-full p-3 bg-white border border-blue-200 rounded-xl outline-none text-sm"
+                    />
+                    <input
+                      required
+                      type="number"
+                      step="0.01"
+                      placeholder="Amount (N$)"
+                      value={receiptDetails.amount || ""}
+                      onChange={(e) =>
+                        setReceiptDetails({ ...receiptDetails, amount: parseFloat(e.target.value) || 0 })
+                      }
+                      className="w-full p-3 bg-white border border-blue-200 rounded-xl outline-none text-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-6">

@@ -96,6 +96,13 @@ export interface LaundryOrder {
   estimated_arrival?: string;
 }
 
+export interface ReceiptDetails {
+  company_name: string;
+  contact_person: string;
+  receipt_number: string;
+  amount: number;
+}
+
 export interface RoomBooking {
   id: string;
   room_id: string;
@@ -106,7 +113,8 @@ export interface RoomBooking {
   customer_email?: string; // Added for compatibility
   guest_id_number?: string;
   source?: "Phone" | "WhatsApp" | "Walk-in" | "Online";
-  payment_method?: "Cash" | "Card";
+  payment_method?: "Cash" | "Card" | "Receipt";
+  receipt_details?: ReceiptDetails;
   total_price: number;
   breakfast_included: boolean;
   additional_services: string[];
@@ -129,7 +137,7 @@ export interface HotelExpenditure {
   category: string;
   item: string;
   amount: number;
-  payment_method: "Cash" | "Card";
+  payment_method: "Cash" | "Card" | "Receipt";
   vendor?: string;
   notes?: string;
   added_by?: string;
@@ -167,7 +175,7 @@ export interface ConferenceRoom {
   name: string;
   capacity: number;
   price_per_hour: number;
-  status: "Available" | "Booked" | "Maintenance";
+  status: "Available" | "Booked" | "Maintenance" | "Occupied";
 }
 
 export interface ConferenceService {
@@ -185,8 +193,41 @@ export interface ConferenceBooking {
   start_time: string;
   end_time: string;
   total_price: number;
-  status: "Confirmed" | "Cancelled" | "Completed" | "Pending";
+  payment_method?: "Cash" | "Card" | "Receipt";
+  receipt_details?: ReceiptDetails;
+  services?: string[];
+  status:
+    | "Confirmed"
+    | "Cancelled"
+    | "Completed"
+    | "Pending"
+    | "Checked In"
+    | "Checked Out";
   created_at: string;
+  folio_id?: string;
+}
+
+export interface ConferenceFolioCharge {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  staff_name?: string;
+  timestamp: string;
+}
+
+export interface ConferenceFolio {
+  id: string;
+  booking_id: string;
+  charges: ConferenceFolioCharge[];
+  deposits: {
+    amount: number;
+    date: string;
+    description: string;
+  }[];
+  total_charges: number;
+  total_deposits: number;
+  balance_due: number;
 }
 
 export interface GlobalPreference {

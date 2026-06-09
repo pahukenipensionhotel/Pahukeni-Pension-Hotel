@@ -51,14 +51,13 @@ import { StaffModule } from "./features/staff/components/StaffModule";
 import { CustomerPortal } from "./features/dashboard/components/CustomerPortal";
 import { ReportsModule } from "./features/reports/components/ReportsModule";
 import { SystemLogs } from "./features/reports/components/SystemLogs";
+import { NotificationSystem } from "./shared/components/NotificationSystem";
+import { useNotificationStore } from "./shared/hooks/useNotifications";
 import usePushNotifications from "./hooks_usePushNotifications";
 
 export default function App() {
   usePushNotifications();
-
-  const [toasts, setToasts] = useState<
-    { id: string; message: string; type: "success" | "error" | "info" }[]
-  >([]);
+  const addNotification = useNotificationStore((s) => s.addNotification);
 
   // Force session persistence
   useEffect(() => {
@@ -77,9 +76,13 @@ export default function App() {
         () => {
           if (auth.currentUser) {
             signOut(auth);
-            alert(
-              "Your session has expired due to inactivity. Please log in again.",
-            );
+            addNotification({
+              type: "warning",
+              layout: "modal",
+              title: "Session Expired",
+              message:
+                "Your session has expired due to inactivity. Please log in again.",
+            });
           }
         },
         15 * 60 * 1000,
@@ -95,17 +98,17 @@ export default function App() {
       clearTimeout(inactivityTimeout);
       events.forEach((e) => window.removeEventListener(e, resetTimer));
     };
-  }, []);
+  }, [addNotification]);
 
   const addToast = (
     message: string,
     type: "success" | "error" | "info" = "info",
   ) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 5000);
+    addNotification({
+      type: type === "info" ? "info" : type,
+      layout: "toast",
+      message,
+    });
   };
 
   const hotelData = useHotelData(addToast);
@@ -117,14 +120,11 @@ export default function App() {
     orders,
     laundry,
     bookings,
-    users,
     conferenceRooms,
     laundryServices,
     conferenceServices,
     conferenceBookings,
     globalPreferences,
-    folios,
-    expenditures,
     notifications,
     stats,
     createNotification,
@@ -479,7 +479,12 @@ export default function App() {
                     </button>
                     <AnimatePresence>
                       {showHotelNotifications && (
-                        <div className="absolute right-0 top-full mt-4 w-96 z-[100] p-2">
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="absolute right-0 top-full mt-4 w-96 z-[100] p-2 origin-top-right"
+                        >
                           <div className="glass-effect rounded-3xl shadow-2xl border border-black/5 overflow-hidden">
                             <NotificationCenterPanel
                               notifications={notifications}
@@ -497,7 +502,7 @@ export default function App() {
                               }}
                             />
                           </div>
-                        </div>
+                        </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
@@ -535,14 +540,11 @@ export default function App() {
                       rooms={rooms}
                       bookings={bookings}
                       globalPreferences={globalPreferences}
-                      folios={folios}
                       isAdmin={isAdmin(user?.role)}
                       userRole={user?.role}
                     />
                   )}
-                  {activeTab === "staff" && (
-                    <StaffModule users={users} bookings={bookings} />
-                  )}
+                  {activeTab === "staff" && <StaffModule bookings={bookings} />}
                   {(activeTab === "restaurant" || activeTab === "bar") && (
                     <POSModule
                       type={activeTab === "restaurant" ? "Restaurant" : "Bar"}
@@ -574,17 +576,7 @@ export default function App() {
                     />
                   )}
                   {activeTab === "reports" && (
-                    <ReportsModule
-                      orders={orders}
-                      laundry={laundry}
-                      bookings={bookings}
-                      conferenceBookings={conferenceBookings}
-                      rooms={rooms}
-                      menu={menu}
-                      folios={folios}
-                      expenditures={expenditures}
-                      user={user}
-                    />
+                    <ReportsModule rooms={rooms} menu={menu} user={user} />
                   )}
                   {activeTab === "system_logs" && <SystemLogs />}
                 </motion.div>
@@ -593,38 +585,7 @@ export default function App() {
           </main>
         </div>
       </AppErrorBoundary>
-      <div className="fixed top-10 right-10 z-100 space-y-4 pointer-events-none max-w-sm w-full">
-        <AnimatePresence>
-          {toasts.map((toast) => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, x: 100, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 100, scale: 0.9 }}
-              className={`pointer-events-auto p-5 rounded-[1.5rem] shadow-2xl border backdrop-blur-md flex items-center gap-4 ${
-                toast.type === "success"
-                  ? "bg-emerald-500/90 border-emerald-400/50 text-white"
-                  : toast.type === "error"
-                    ? "bg-red-500/90 border-red-400/50 text-white"
-                    : "bg-black/80 border-white/10 text-white"
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
-                {toast.type === "success" ? (
-                  <CheckCircle2 size={20} />
-                ) : toast.type === "error" ? (
-                  <AlertCircle size={20} />
-                ) : (
-                  <Bell size={20} />
-                )}
-              </div>
-              <p className="text-xs font-bold leading-relaxed">
-                {toast.message}
-              </p>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      <NotificationSystem />
     </>
   );
 }

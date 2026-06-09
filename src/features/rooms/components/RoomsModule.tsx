@@ -24,6 +24,8 @@ import {
   collection,
   deleteDoc,
   writeBatch,
+  onSnapshot,
+  query,
 } from "firebase/firestore";
 import { db } from "../../../services/firebase/client";
 import {
@@ -69,18 +71,28 @@ export const RoomsModule = ({
   rooms,
   bookings,
   globalPreferences,
-  folios,
   isAdmin,
   userRole,
 }: {
   rooms: Room[];
   bookings: RoomBooking[];
   globalPreferences: GlobalPreference[];
-  folios: Folio[];
   isAdmin: boolean;
   userRole?: string;
 }) => {
+  const [folios, setFolios] = useState<Folio[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+
+  useEffect(() => {
+    if (!canManageRooms(userRole as any)) return;
+    const unsub = onSnapshot(query(collection(db, "folios")), (snap) => {
+      setFolios(
+        snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Folio),
+      );
+    });
+    return () => unsub();
+  }, [userRole]);
+
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [selectedFolioBooking, setSelectedFolioBooking] =
     useState<RoomBooking | null>(null);

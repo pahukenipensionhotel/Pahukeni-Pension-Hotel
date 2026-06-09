@@ -17,6 +17,7 @@ import {
 } from "../../../shared/validation/inputs";
 import { IMAGE_CATALOG } from "../../../shared/assets/imageCatalog";
 import { logger } from "../../../shared/utils/logger";
+import { InlineNotification } from "../../../shared/components/NotificationSystem";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -390,9 +391,14 @@ export function LoginPage() {
                 />
               </div>
               {error && (
-                <p className="text-red-500 text-xs font-mono leading-relaxed">
-                  {error}
-                </p>
+                <InlineNotification
+                  type={
+                    error.includes("sent") || error.includes("success")
+                      ? "success"
+                      : "error"
+                  }
+                  message={error}
+                />
               )}
               <button
                 type="submit"

@@ -6,6 +6,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   updateDoc,
   doc,
 } from "firebase/firestore";
@@ -88,7 +89,6 @@ export function useHotelData(
   const [orders, setOrders] = useState<Order[]>([]);
   const [laundry, setLaundry] = useState<LaundryOrder[]>([]);
   const [bookings, setBookings] = useState<RoomBooking[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [conferenceRooms, setConferenceRooms] = useState<ConferenceRoom[]>([]);
   const [laundryServices, setLaundryServices] = useState<LaundryService[]>([]);
   const [conferenceServices, setConferenceServices] = useState<
@@ -100,8 +100,6 @@ export function useHotelData(
   const [globalPreferences, setGlobalPreferences] = useState<
     GlobalPreference[]
   >([]);
-  const [folios, setFolios] = useState<Folio[]>([]);
-  const [expenditures, setExpenditures] = useState<HotelExpenditure[]>([]);
   const [notifications, setHotelNotifications] = useState<HotelNotification[]>(
     [],
   );
@@ -155,9 +153,20 @@ export function useHotelData(
         reportListenerError(error, OperationType.GET, "menu_items", showToast),
     );
 
+    // Optimization: Filter for active/recent orders (Limit 50)
     const ordersQuery = isStaff
-      ? collection(db, "orders")
-      : query(collection(db, "orders"), where("customer_uid", "==", user.id));
+      ? query(
+          collection(db, "orders"),
+          where("status", "in", ["Pending", "Processing", "Ready", "Served"]),
+          orderBy("created_at", "desc"),
+          limit(50),
+        )
+      : query(
+          collection(db, "orders"),
+          where("customer_uid", "==", user.id),
+          orderBy("created_at", "desc"),
+          limit(50),
+        );
 
     const unsubOrders = onSnapshot(
       ordersQuery,
@@ -192,11 +201,24 @@ export function useHotelData(
         reportListenerError(error, OperationType.GET, "orders", showToast),
     );
 
+    // Optimization: Filter for active/recent laundry (Limit 50)
     const laundryQuery = isStaff
-      ? collection(db, "laundry_orders")
+      ? query(
+          collection(db, "laundry_orders"),
+          where("status", "in", [
+            "Pending",
+            "Processing",
+            "Ready",
+            "Collected",
+          ]),
+          orderBy("created_at", "desc"),
+          limit(50),
+        )
       : query(
           collection(db, "laundry_orders"),
           where("customer_uid", "==", user.id),
+          orderBy("created_at", "desc"),
+          limit(50),
         );
 
     const unsubLaundry = onSnapshot(
@@ -229,11 +251,24 @@ export function useHotelData(
         ),
     );
 
+    // Optimization: Filter for active/recent bookings (Limit 100)
     const roomBookingsQuery = isStaff
-      ? collection(db, "room_bookings")
+      ? query(
+          collection(db, "room_bookings"),
+          where("status", "in", [
+            "Confirmed",
+            "Active",
+            "Pending",
+            "Checked In",
+          ]),
+          orderBy("check_in", "desc"),
+          limit(100),
+        )
       : query(
           collection(db, "room_bookings"),
           where("guest_uid", "==", user.id),
+          orderBy("check_in", "desc"),
+          limit(100),
         );
 
     const unsubBookings = onSnapshot(
@@ -252,51 +287,6 @@ export function useHotelData(
           "room_bookings",
           showToast,
         ),
-    );
-
-    const canReadFolios = canManageRooms(user.role);
-    const unsubFolios = canReadFolios
-      ? onSnapshot(
-          collection(db, "folios"),
-          (snapshot) => {
-            setFolios(
-              snapshot.docs.map(
-                (doc) => ({ id: doc.id, ...doc.data() }) as Folio,
-              ),
-            );
-          },
-          (error) =>
-            reportListenerError(error, OperationType.GET, "folios", showToast),
-        )
-      : () => setFolios([]);
-
-    const unsubExpenditures = onSnapshot(
-      collection(db, "expenditures"),
-      (snapshot) => {
-        setExpenditures(
-          snapshot.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() }) as HotelExpenditure,
-          ),
-        );
-      },
-      (error) =>
-        reportListenerError(
-          error,
-          OperationType.GET,
-          "expenditures",
-          showToast,
-        ),
-    );
-
-    const unsubUsers = onSnapshot(
-      collection(db, "users"),
-      (snapshot) => {
-        setUsers(
-          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as User),
-        );
-      },
-      (error) =>
-        reportListenerError(error, OperationType.GET, "users", showToast),
     );
 
     const unsubConfRooms = onSnapshot(
@@ -353,8 +343,23 @@ export function useHotelData(
         ),
     );
 
+    // Optimization: Filter for active/recent conference bookings (Limit 100)
+    const conferenceBookingsQuery = isStaff
+      ? query(
+          collection(db, "conference_bookings"),
+          where("status", "in", ["Confirmed", "Active", "Pending", "Checked In", "Checked Out"]),
+          orderBy("start_time", "desc"),
+          limit(100),
+        )
+      : query(
+          collection(db, "conference_bookings"),
+          where("client_uid", "==", user.id),
+          orderBy("start_time", "desc"),
+          limit(100),
+        );
+
     const unsubConfBookings = onSnapshot(
-      collection(db, "conference_bookings"),
+      conferenceBookingsQuery,
       (snapshot) => {
         setConferenceBookings(
           snapshot.docs.map(
@@ -376,6 +381,7 @@ export function useHotelData(
         collection(db, "notifications"),
         where("userId", "==", user.id),
         orderBy("created_at", "desc"),
+        limit(50),
       ),
       (snapshot) => {
         const personalNotifs = snapshot.docs.map(
@@ -383,16 +389,6 @@ export function useHotelData(
         );
         setHotelNotifications((prev) => {
           const unique = dedupeById([...prev, ...personalNotifs]);
-          personalNotifs
-            .filter((n) => !n.read)
-            .forEach((n) => {
-              if (Date.now() - new Date(n.created_at).getTime() < 10000) {
-                NotificationService.notify(n.title, {
-                  body: n.message,
-                  tag: n.id,
-                });
-              }
-            });
           return unique.sort(
             (a, b) =>
               new Date(b.created_at).getTime() -
@@ -407,6 +403,7 @@ export function useHotelData(
         collection(db, "notifications"),
         where("role", "==", user.role),
         orderBy("created_at", "desc"),
+        limit(50),
       ),
       (snapshot) => {
         const roleNotifs = snapshot.docs.map(
@@ -414,16 +411,6 @@ export function useHotelData(
         );
         setHotelNotifications((prev) => {
           const unique = dedupeById([...prev, ...roleNotifs]);
-          roleNotifs
-            .filter((n) => !n.read)
-            .forEach((n) => {
-              if (Date.now() - new Date(n.created_at).getTime() < 10000) {
-                NotificationService.notify(n.title, {
-                  body: n.message,
-                  tag: n.id,
-                });
-              }
-            });
           return unique.sort(
             (a, b) =>
               new Date(b.created_at).getTime() -
@@ -457,7 +444,6 @@ export function useHotelData(
       unsubOrders();
       unsubLaundry();
       unsubBookings();
-      unsubUsers();
       unsubConfRooms();
       unsubLaundryServices();
       unsubConfServices();
@@ -465,22 +451,18 @@ export function useHotelData(
       unsubNotifs();
       unsubRoleNotifs();
       unsubPrefs();
-      unsubFolios();
-      unsubExpenditures();
     };
   }, [user]);
 
   useEffect(() => {
-    // Client-side image migration has been intentionally removed.
-    // Image/asset migrations should run via an admin-controlled process (e.g. Cloud Function or a CLI script)
-    // to avoid accidental permission errors from client environments.
+    // Image migration removed for security/efficiency.
   }, [authReady, menu, rooms, user]);
 
   const stats = useMemo(
     () => ({
       activeGuests: bookings.filter((b) => b.status === "Active").length,
       availableRooms: rooms.filter((r) => r.status === "Available").length,
-      pendingLaundry: laundry.filter((l) => l.status !== "Delivered").length,
+      pendingLaundry: laundry.filter((l) => l.status === "Received").length,
       totalRevenue: [...bookings, ...orders, ...laundry].reduce(
         (sum, item) => sum + (item.total_price || 0),
         0,
@@ -518,14 +500,11 @@ export function useHotelData(
     orders,
     laundry,
     bookings,
-    users,
     conferenceRooms,
     laundryServices,
     conferenceServices,
     conferenceBookings,
     globalPreferences,
-    folios,
-    expenditures,
     notifications,
     stats,
     createNotification,
