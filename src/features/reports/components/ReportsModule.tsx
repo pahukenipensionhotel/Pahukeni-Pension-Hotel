@@ -39,6 +39,26 @@ function toMs(dateStr: string): number {
   return new Date(dateStr).getTime();
 }
 
+function fmtDate(iso: string): string {
+  return format(parseISO(iso), "dd MMM yyyy");
+}
+
+function fmtTime(iso: string): string {
+  return format(parseISO(iso), "HH:mm");
+}
+
+interface TransactionRow {
+  id: string;
+  date: string;
+  dateMs: number;
+  description: string;
+  category: string;
+  type: "Revenue" | "Expense";
+  source: "Room" | "Conference" | "F&B" | "Laundry" | "Expenditure";
+  payment_method?: string;
+  amount: number;
+}
+
 export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any }) {
   const today = format(new Date(), "yyyy-MM-dd");
   const [startDate, setStartDate] = useState(today);
@@ -129,12 +149,14 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     [bookings, range],
   );
 
-  const conferenceRevenue = useMemo(
-    () =>
-      conferenceBookings
-        .filter((b) => inRange(toMs(b.created_at || b.start_time), range))
-        .reduce((sum, b) => sum + (b.total_price || 0), 0),
+  const inRangeConfBookings = useMemo(
+    () => conferenceBookings.filter((b) => inRange(toMs(b.created_at || b.start_time), range)),
     [conferenceBookings, range],
+  );
+
+  const conferenceRevenue = useMemo(
+    () => inRangeConfBookings.reduce((sum, b) => sum + (b.total_price || 0), 0),
+    [inRangeConfBookings],
   );
 
   const foodRevenue = useMemo(
@@ -192,24 +214,24 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
 
   const confCash = useMemo(
     () =>
-      conferenceBookings
-        .filter((b) => b.payment_method === "Cash" && inRange(toMs(b.created_at || b.start_time), range))
+      inRangeConfBookings
+        .filter((b) => b.payment_method === "Cash")
         .reduce((s, b) => s + (b.total_price || 0), 0),
-    [conferenceBookings, range],
+    [inRangeConfBookings],
   );
   const confCard = useMemo(
     () =>
-      conferenceBookings
-        .filter((b) => b.payment_method === "Card" && inRange(toMs(b.created_at || b.start_time), range))
+      inRangeConfBookings
+        .filter((b) => b.payment_method === "Card")
         .reduce((s, b) => s + (b.total_price || 0), 0),
-    [conferenceBookings, range],
+    [inRangeConfBookings],
   );
   const confReceipt = useMemo(
     () =>
-      conferenceBookings
-        .filter((b) => b.payment_method === "Receipt" && inRange(toMs(b.created_at || b.start_time), range))
+      inRangeConfBookings
+        .filter((b) => b.payment_method === "Receipt")
         .reduce((s, b) => s + (b.total_price || 0), 0),
-    [conferenceBookings, range],
+    [inRangeConfBookings],
   );
 
   const cashTotal = roomCash + confCash;
@@ -236,6 +258,83 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
       laundryOrders.filter((l) => l.status === "Delivered" && inRange(toMs(l.created_at), range)),
     [laundryOrders, range],
   );
+
+  const transactions = useMemo<TransactionRow[]>(() => {
+    const rows: TransactionRow[] = [];
+
+    inRangeCheckIns.forEach((b) => {
+      rows.push({
+        id: `room-${b.id}`,
+        date: b.check_in,
+        dateMs: toMs(b.check_in),
+        description: `${b.guest_name} — ${b.room_number}`,
+        category: "Room Booking",
+        type: "Revenue",
+        source: "Room",
+        payment_method: b.payment_method,
+        amount: b.total_price,
+      });
+    });
+
+    inRangeConfBookings.forEach((b) => {
+      rows.push({
+        id: `conf-${b.id}`,
+        date: b.start_time,
+        dateMs: toMs(b.start_time),
+        description: `${b.client_name} — ${b.room_name}`,
+        category: "Conference Booking",
+        type: "Revenue",
+        source: "Conference",
+        payment_method: b.payment_method,
+        amount: b.total_price,
+      });
+    });
+
+    inRangeOrders.forEach((o) => {
+      rows.push({
+        id: `order-${o.id}`,
+        date: o.created_at,
+        dateMs: toMs(o.created_at),
+        description: `${o.customer_name || "Guest"} — ${o.items.map((i) => i.name).join(", ")}`,
+        category: `${o.type} Order`,
+        type: "Revenue",
+        source: "F&B",
+        payment_method: undefined,
+        amount: o.total_price,
+      });
+    });
+
+    inRangeLaundry.forEach((l) => {
+      rows.push({
+        id: `laundry-${l.id}`,
+        date: l.created_at,
+        dateMs: toMs(l.created_at),
+        description: `${l.guest_name}${l.room_number ? ` — Room ${l.room_number}` : ""}`,
+        category: "Laundry",
+        type: "Revenue",
+        source: "Laundry",
+        payment_method: undefined,
+        amount: l.total_price,
+      });
+    });
+
+    inRangeExpenditures.forEach((e) => {
+      rows.push({
+        id: `exp-${e.id}`,
+        date: e.date || e.created_at,
+        dateMs: toMs(e.date || e.created_at),
+        description: e.item,
+        category: e.category,
+        type: "Expense",
+        source: "Expenditure",
+        payment_method: e.payment_method,
+        amount: e.amount,
+      });
+    });
+
+    rows.sort((a, b) => b.dateMs - a.dateMs);
+    return rows;
+  }, [inRangeCheckIns, inRangeConfBookings, inRangeOrders, inRangeLaundry, inRangeExpenditures]);
 
   const addExpenditure = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,16 +402,34 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     push("Receipt", String(receiptCount), safe(currency.format(receiptTotal)));
     push("");
 
+    push("TRANSACTION LOG");
+    push("Date,Time,Description,Category,Type,Source,Payment,Amount");
+    transactions.forEach((t) =>
+      push(
+        safe(fmtDate(t.date)),
+        safe(fmtTime(t.date)),
+        safe(t.description),
+        safe(t.category),
+        t.type,
+        t.source,
+        safe(t.payment_method || "—"),
+        safe(currency.format(t.type === "Expense" ? -t.amount : t.amount)),
+      ),
+    );
+    push("");
+
     push("ROOM BOOKINGS");
-    push("Guest,Room,Check-in,Check-out,Payment,Amount,Status");
+    push("Date,Time,Guest,Room,Check-in,Check-out,Payment,Amount,Status");
     bookings
       .filter((b) => inRange(toMs(b.check_in), range))
       .forEach((b) =>
         push(
+          safe(fmtDate(b.created_at || b.check_in)),
+          safe(fmtTime(b.created_at || b.check_in)),
           safe(b.guest_name),
           safe(b.room_number),
-          safe(format(parseISO(b.check_in), "yyyy-MM-dd")),
-          safe(format(parseISO(b.check_out), "yyyy-MM-dd")),
+          safe(fmtDate(b.check_in)),
+          safe(fmtDate(b.check_out)),
           safe(b.payment_method),
           safe(currency.format(b.total_price)),
           safe(b.status),
@@ -321,11 +438,13 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     push("");
 
     push("CONFERENCE BOOKINGS");
-    push("Client,Room,Start,End,Payment,Amount,Status");
+    push("Date,Time,Client,Room,Start,End,Payment,Amount,Status");
     conferenceBookings
       .filter((b) => inRange(toMs(b.start_time), range))
       .forEach((b) =>
         push(
+          safe(fmtDate(b.created_at || b.start_time)),
+          safe(fmtTime(b.created_at || b.start_time)),
           safe(b.client_name),
           safe(b.room_name),
           safe(format(parseISO(b.start_time), "yyyy-MM-dd HH:mm")),
@@ -338,9 +457,11 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     push("");
 
     push("FOOD & BEVERAGE ORDERS");
-    push("Customer,Items,Type,Status,Amount");
+    push("Date,Time,Customer,Items,Type,Status,Amount");
     inRangeOrders.forEach((o) =>
       push(
+        safe(fmtDate(o.created_at)),
+        safe(fmtTime(o.created_at)),
         safe(o.customer_name),
         safe(o.items.map((i) => `${i.name} x${i.qty}`).join("; ")),
         safe(o.type),
@@ -351,9 +472,11 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     push("");
 
     push("LAUNDRY ORDERS");
-    push("Guest,Room,Items,Status,Amount");
+    push("Date,Time,Guest,Room,Items,Status,Amount");
     inRangeLaundry.forEach((l) =>
       push(
+        safe(fmtDate(l.created_at)),
+        safe(fmtTime(l.created_at)),
         safe(l.guest_name),
         safe(l.room_number),
         safe(l.items.map((i) => `${i.name} x${i.qty}`).join("; ")),
@@ -364,14 +487,15 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     push("");
 
     push("EXPENDITURE");
-    push("Item,Category,Vendor,Payment,Date,Amount");
+    push("Date,Time,Item,Category,Vendor,Payment,Amount");
     inRangeExpenditures.forEach((e) =>
       push(
+        safe(fmtDate(e.date || e.created_at)),
+        safe(fmtTime(e.date || e.created_at)),
         safe(e.item),
         safe(e.category),
         safe(e.vendor),
         safe(e.payment_method),
-        safe(format(parseISO(e.date || e.created_at), "yyyy-MM-dd")),
         safe(currency.format(e.amount)),
       ),
     );
@@ -389,7 +513,7 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     startDate, endDate, roomRevenue, conferenceRevenue, foodRevenue, laundryRevenue,
     totalRevenue, totalExpenditure, netRevenue, inRangeCheckIns, inRangeCheckOuts,
     cashTotal, cardTotal, receiptTotal, bookings, conferenceBookings,
-    inRangeOrders, inRangeLaundry, inRangeExpenditures, range,
+    inRangeOrders, inRangeLaundry, inRangeExpenditures, transactions, range,
   ]);
 
   const numSources = [bookings, conferenceBookings, expenditures, orders, laundryOrders].filter(
@@ -401,6 +525,9 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
     startDate === endDate
       ? format(parseISO(startDate), "EEEE, dd MMMM yyyy")
       : `${format(parseISO(startDate), "dd MMM yyyy")} - ${format(parseISO(endDate), "dd MMM yyyy")}`;
+
+  const revenueTotal = transactions.filter((t) => t.type === "Revenue").reduce((s, t) => s + t.amount, 0);
+  const expenseTotal = transactions.filter((t) => t.type === "Expense").reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -545,101 +672,78 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
             </div>
           </div>
 
-          {/* F&B Revenue */}
-          {inRangeOrders.length > 0 && (
-            <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
-              <div className="p-6 border-b border-black/5">
-                <h3 className="text-sm font-serif italic">
-                  Food & Beverage Orders ({currency.format(foodRevenue)})
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
-                    <tr>
-                      <th className="p-4">Customer</th>
-                      <th className="p-4">Items</th>
-                      <th className="p-4">Type</th>
-                      <th className="p-4 text-right">Amount</th>
-                      <th className="p-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-black/5">
-                    {inRangeOrders.map((o) => (
-                      <tr key={o.id} className="hover:bg-gray-50">
-                        <td className="p-4 font-medium">{o.customer_name || "—"}</td>
-                        <td className="p-4 text-black/60">
-                          {o.items.map((i) => `${i.name} x${i.qty}`).join(", ")}
-                        </td>
-                        <td className="p-4">
-                          <span className="text-[10px] font-mono uppercase">{o.type}</span>
-                        </td>
-                        <td className="p-4 text-right font-mono">
-                          {currency.format(o.total_price)}
-                        </td>
-                        <td className="p-4">
-                          <span className="text-[10px] font-mono uppercase text-emerald-600">{o.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Transaction Log — individual items with date, time, amount */}
+          <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
+            <div className="p-6 border-b border-black/5 flex items-center justify-between">
+              <h3 className="text-sm font-serif italic">
+                Transaction Log ({transactions.length} entries)
+              </h3>
+              <div className="flex gap-4 text-[10px] font-mono text-black/30">
+                <span>Revenue: <span className="text-emerald-600 font-bold">{currency.format(revenueTotal)}</span></span>
+                <span>Expenses: <span className="text-red-600 font-bold">{currency.format(expenseTotal)}</span></span>
               </div>
             </div>
-          )}
-
-          {/* Laundry Revenue */}
-          {inRangeLaundry.length > 0 && (
-            <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
-              <div className="p-6 border-b border-black/5">
-                <h3 className="text-sm font-serif italic">
-                  Laundry Orders ({currency.format(laundryRevenue)})
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40 sticky top-0">
+                  <tr>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Time</th>
+                    <th className="p-3">Description</th>
+                    <th className="p-3">Source</th>
+                    <th className="p-3">Payment</th>
+                    <th className="p-3 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/5">
+                  {transactions.length === 0 && (
                     <tr>
-                      <th className="p-4">Guest</th>
-                      <th className="p-4">Room</th>
-                      <th className="p-4">Items</th>
-                      <th className="p-4 text-right">Amount</th>
-                      <th className="p-4">Status</th>
+                      <td colSpan={6} className="p-6 text-center text-black/40">
+                        No transactions in this period
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-black/5">
-                    {inRangeLaundry.map((l) => (
-                      <tr key={l.id} className="hover:bg-gray-50">
-                        <td className="p-4 font-medium">{l.guest_name}</td>
-                        <td className="p-4">{l.room_number || "—"}</td>
-                        <td className="p-4 text-black/60">
-                          {l.items.map((i) => `${i.name} x${i.qty}`).join(", ")}
-                        </td>
-                        <td className="p-4 text-right font-mono">
-                          {currency.format(l.total_price)}
-                        </td>
-                        <td className="p-4">
-                          <span className="text-[10px] font-mono uppercase text-emerald-600">{l.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                  {transactions.map((t) => (
+                    <tr key={t.id} className="hover:bg-gray-50">
+                      <td className="p-3 font-mono text-[11px] whitespace-nowrap">{fmtDate(t.date)}</td>
+                      <td className="p-3 font-mono text-[11px] text-black/50 whitespace-nowrap">{fmtTime(t.date)}</td>
+                      <td className="p-3 font-medium">{t.description}</td>
+                      <td className="p-3">
+                        <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
+                          t.source === "Expenditure"
+                            ? "bg-red-50 text-red-600"
+                            : "bg-emerald-50 text-emerald-600"
+                        }`}>
+                          {t.source}
+                        </span>
+                      </td>
+                      <td className="p-3 text-[10px] font-mono text-black/40 uppercase">
+                        {t.payment_method || "—"}
+                      </td>
+                      <td className={`p-3 text-right font-mono text-sm font-bold ${
+                        t.type === "Expense" ? "text-red-600" : "text-emerald-700"
+                      }`}>
+                        {t.type === "Expense" ? "-" : "+"}{currency.format(t.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
 
-          {/* Check-ins Table */}
+          {/* Room Check-ins Table */}
           <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
             <div className="p-6 border-b border-black/5">
               <h3 className="text-sm font-serif italic">
-                Room Check-ins ({inRangeCheckIns.length})
+                Room Bookings ({inRangeCheckIns.length}) — {currency.format(roomRevenue)}
               </h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
                   <tr>
+                    <th className="p-4">Date / Time</th>
                     <th className="p-4">Guest</th>
                     <th className="p-4">Room</th>
                     <th className="p-4">Payment</th>
@@ -650,13 +754,17 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
                 <tbody className="divide-y divide-black/5">
                   {inRangeCheckIns.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-black/40">
-                        No check-ins in this period
+                      <td colSpan={6} className="p-6 text-center text-black/40">
+                        No room bookings in this period
                       </td>
                     </tr>
                   )}
                   {inRangeCheckIns.map((b) => (
                     <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="p-4 font-mono text-[11px] whitespace-nowrap">
+                        {fmtDate(b.created_at || b.check_in)}<br />
+                        <span className="text-black/40">{fmtTime(b.created_at || b.check_in)}</span>
+                      </td>
                       <td className="p-4 font-medium">{b.guest_name}</td>
                       <td className="p-4">{b.room_number}</td>
                       <td className="p-4">
@@ -664,8 +772,8 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
                           {b.payment_method || "N/A"}
                         </span>
                       </td>
-                      <td className="p-4 text-right font-mono">
-                        {currency.format(b.total_price)}
+                      <td className="p-4 text-right font-mono text-emerald-700 font-bold">
+                        +{currency.format(b.total_price)}
                       </td>
                       <td className="p-4">
                         <span
@@ -687,21 +795,157 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
             </div>
           </div>
 
-          {/* Expenditure Table */}
-          {inRangeExpenditures.length > 0 && (
+          {/* Conference Bookings Table */}
+          {inRangeConfBookings.length > 0 && (
             <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
               <div className="p-6 border-b border-black/5">
                 <h3 className="text-sm font-serif italic">
-                  Expenditure ({currency.format(totalExpenditure)})
+                  Conference Bookings ({inRangeConfBookings.length}) — {currency.format(conferenceRevenue)}
                 </h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
                     <tr>
+                      <th className="p-4">Date / Time</th>
+                      <th className="p-4">Client</th>
+                      <th className="p-4">Facility</th>
+                      <th className="p-4">Payment</th>
+                      <th className="p-4 text-right">Amount</th>
+                      <th className="p-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {inRangeConfBookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-gray-50">
+                        <td className="p-4 font-mono text-[11px] whitespace-nowrap">
+                          {fmtDate(b.created_at || b.start_time)}<br />
+                          <span className="text-black/40">{fmtTime(b.created_at || b.start_time)}</span>
+                        </td>
+                        <td className="p-4 font-medium">{b.client_name}</td>
+                        <td className="p-4">{b.room_name}</td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-mono uppercase">
+                            {b.payment_method || "N/A"}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right font-mono text-emerald-700 font-bold">
+                          +{currency.format(b.total_price)}
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-mono uppercase text-black/40">
+                            {b.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* F&B Orders Table */}
+          {inRangeOrders.length > 0 && (
+            <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
+              <div className="p-6 border-b border-black/5">
+                <h3 className="text-sm font-serif italic">
+                  Food & Beverage Orders ({inRangeOrders.length}) — {currency.format(foodRevenue)}
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
+                    <tr>
+                      <th className="p-4">Date / Time</th>
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Items</th>
+                      <th className="p-4">Type</th>
+                      <th className="p-4 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {inRangeOrders.map((o) => (
+                      <tr key={o.id} className="hover:bg-gray-50">
+                        <td className="p-4 font-mono text-[11px] whitespace-nowrap">
+                          {fmtDate(o.created_at)}<br />
+                          <span className="text-black/40">{fmtTime(o.created_at)}</span>
+                        </td>
+                        <td className="p-4 font-medium">{o.customer_name || "—"}</td>
+                        <td className="p-4 text-black/60 text-xs">
+                          {o.items.map((i) => `${i.name} x${i.qty}`).join(", ")}
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-mono uppercase">{o.type}</span>
+                        </td>
+                        <td className="p-4 text-right font-mono text-emerald-700 font-bold">
+                          +{currency.format(o.total_price)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Laundry Orders Table */}
+          {inRangeLaundry.length > 0 && (
+            <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
+              <div className="p-6 border-b border-black/5">
+                <h3 className="text-sm font-serif italic">
+                  Laundry Orders ({inRangeLaundry.length}) — {currency.format(laundryRevenue)}
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
+                    <tr>
+                      <th className="p-4">Date / Time</th>
+                      <th className="p-4">Guest</th>
+                      <th className="p-4">Room</th>
+                      <th className="p-4">Items</th>
+                      <th className="p-4 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {inRangeLaundry.map((l) => (
+                      <tr key={l.id} className="hover:bg-gray-50">
+                        <td className="p-4 font-mono text-[11px] whitespace-nowrap">
+                          {fmtDate(l.created_at)}<br />
+                          <span className="text-black/40">{fmtTime(l.created_at)}</span>
+                        </td>
+                        <td className="p-4 font-medium">{l.guest_name}</td>
+                        <td className="p-4">{l.room_number || "—"}</td>
+                        <td className="p-4 text-black/60 text-xs">
+                          {l.items.map((i) => `${i.name} x${i.qty}`).join(", ")}
+                        </td>
+                        <td className="p-4 text-right font-mono text-emerald-700 font-bold">
+                          +{currency.format(l.total_price)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Expenditure Table */}
+          {inRangeExpenditures.length > 0 && (
+            <div className="rounded-2xl border border-black/5 bg-white overflow-hidden">
+              <div className="p-6 border-b border-black/5">
+                <h3 className="text-sm font-serif italic">
+                  Expenditure ({inRangeExpenditures.length}) — {currency.format(totalExpenditure)}
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-[10px] font-mono uppercase text-black/40">
+                    <tr>
+                      <th className="p-4">Date / Time</th>
                       <th className="p-4">Item</th>
                       <th className="p-4">Category</th>
-                      <th className="p-4">Vendor</th>
                       <th className="p-4">Payment</th>
                       <th className="p-4 text-right">Amount</th>
                     </tr>
@@ -709,16 +953,19 @@ export function ReportsModule({ rooms }: { rooms: Room[]; menu: any[]; user: any
                   <tbody className="divide-y divide-black/5">
                     {inRangeExpenditures.map((e) => (
                       <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="p-4 font-mono text-[11px] whitespace-nowrap">
+                          {fmtDate(e.date || e.created_at)}<br />
+                          <span className="text-black/40">{fmtTime(e.date || e.created_at)}</span>
+                        </td>
                         <td className="p-4">{e.item}</td>
                         <td className="p-4 text-black/60">{e.category}</td>
-                        <td className="p-4 text-black/60">{e.vendor || "—"}</td>
                         <td className="p-4">
                           <span className="text-[10px] font-mono uppercase">
                             {e.payment_method}
                           </span>
                         </td>
-                        <td className="p-4 text-right font-mono text-red-600">
-                          - {currency.format(e.amount)}
+                        <td className="p-4 text-right font-mono text-red-600 font-bold">
+                          -{currency.format(e.amount)}
                         </td>
                       </tr>
                     ))}
